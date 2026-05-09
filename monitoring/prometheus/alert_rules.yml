@@ -1,0 +1,102 @@
+groups:
+  - name: indomitum-api
+    rules:
+      # High error rate (>5% 5xx responses over 5 minutes)
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_request_duration_seconds_count{status=~"5.."}[5m]))
+            /
+            sum(rate(http_request_duration_seconds_count[5m]))
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High API error rate ({{ $value | humanizePercentage }})"
+          description: "More than 5% of API requests are returning 5xx errors."
+
+      # Slow response times (p95 > 2s)
+      - alert: SlowResponseTime
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+          > 2
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 latency is {{ $value | humanizeDuration }}"
+          description: "The 95th percentile response time exceeds 2 seconds."
+
+      # API down
+      - alert: APIDown
+        expr: up{job="indomitum-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Indomitum API is unreachable"
+          description: "Prometheus cannot scrape the API metrics endpoint."
+
+      # Health endpoint degraded
+      - alert: HealthCheckDegraded
+        expr: |
+          probe_success{job="indomitum-api"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API health check is failing"
+
+  - name: infrastructure
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage ({{ $value | humanize }}%)"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Memory usage is {{ $value | humanize }}%"
+
+      # Disk space low
+      - alert: DiskSpaceLow
+        expr: |
+          (1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk usage is {{ $value | humanize }}%"
+
+  - name: postgres
+    rules:
+      # Too many connections
+      - alert: PostgresTooManyConnections
+        expr: |
+          pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL has {{ $value }} active connections"
+
+      # Postgres down
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is unreachable"

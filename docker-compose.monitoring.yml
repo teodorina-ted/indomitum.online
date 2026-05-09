@@ -1,0 +1,85 @@
+version: "3.9"
+
+# Monitoring stack — use with: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
+services:
+  # ── Prometheus ──
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+
+  # ── Grafana ──
+  grafana:
+    image: grafana/grafana:11.1.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+  # ── Node Exporter (host metrics) ──
+  node-exporter:
+    image: prom/node-exporter:v1.8.1
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "9100:9100"
+
+  # ── PostgreSQL Exporter ──
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://indomitum:${DB_PASSWORD:-changeme}@db:5432/indomitum?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - db
+
+  # ── Loki (Log aggregation) ──
+  loki:
+    image: grafana/loki:2.9.4
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+
+  # ── Promtail (Log collector) ──
+  promtail:
+    image: grafana/promtail:2.9.4
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:

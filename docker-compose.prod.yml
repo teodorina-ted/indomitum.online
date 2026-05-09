@@ -1,0 +1,43 @@
+version: "3.9"
+
+# Production compose with HTTPS via Let's Encrypt + Nginx reverse proxy
+# Usage:
+#   1. Set environment variables: DOMAIN, LETSENCRYPT_EMAIL, DB_PASSWORD, MONGO_PASSWORD, JWT_SECRET
+#   2. Run: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  # ── Nginx HTTPS Reverse Proxy ──
+  nginx-proxy:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/prod.conf:/etc/nginx/templates/default.conf.template:ro
+      - certbot-webroot:/var/www/certbot:ro
+      - certbot-certs:/etc/letsencrypt:ro
+    environment:
+      - DOMAIN=${DOMAIN:-indomitum.example.com}
+    depends_on:
+      - frontend
+      - api
+
+  # ── Certbot for Let's Encrypt ──
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+  # Override frontend to not expose ports directly (nginx-proxy handles it)
+  frontend:
+    ports: []
+
+  api:
+    ports: []
+
+volumes:
+  certbot-webroot:
+  certbot-certs:

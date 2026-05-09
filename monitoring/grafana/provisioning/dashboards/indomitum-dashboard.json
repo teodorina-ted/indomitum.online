@@ -1,0 +1,130 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "API Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(indomitum_http_requests_total[5m])",
+          "legendFormat": "{{method}} {{route}} {{status_code}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "title": "API Response Time (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(indomitum_http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(indomitum_http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Error Rate (5xx)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(indomitum_http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(indomitum_http_requests_total[5m])) * 100",
+          "legendFormat": "Error %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 }] } }
+      }
+    },
+    {
+      "title": "Uptime",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 },
+      "targets": [
+        {
+          "expr": "indomitum_process_uptime_seconds",
+          "legendFormat": "Uptime"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Memory Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "indomitum_process_resident_memory_bytes",
+          "legendFormat": "RSS"
+        },
+        {
+          "expr": "indomitum_nodejs_heap_size_used_bytes",
+          "legendFormat": "Heap Used"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes" }
+      }
+    },
+    {
+      "title": "CPU Usage (%)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(indomitum_process_cpu_seconds_total[5m]) * 100",
+          "legendFormat": "CPU %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percent" }
+      }
+    },
+    {
+      "title": "PostgreSQL Active Connections",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "pg_stat_activity_count",
+          "legendFormat": "Connections"
+        }
+      ]
+    },
+    {
+      "title": "Requests by Status Code",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (status_code) (increase(indomitum_http_requests_total[1h]))",
+          "legendFormat": "{{status_code}}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["indomitum", "api", "monitoring"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Indomitum — API & Infrastructure",
+  "uid": "indomitum-main"
+}
