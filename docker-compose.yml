@@ -1,6 +1,7 @@
 version: "3.9"
 
 services:
+  # PostgreSQL Database
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -19,6 +20,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # MongoDB (alternative/secondary database)
   mongo:
     image: mongo:7
     restart: unless-stopped
@@ -36,6 +38,7 @@ services:
       timeout: 5s
       retries: 5
 
+  # Backend API
   api:
     build:
       context: ./api
@@ -54,6 +57,7 @@ services:
       mongo:
         condition: service_healthy
 
+  # Frontend (Nginx)
   frontend:
     build:
       context: .
@@ -62,8 +66,7 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      api:
-        condition: service_started
+      - api
 
 volumes:
   pgdata:

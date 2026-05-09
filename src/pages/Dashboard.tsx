@@ -66,7 +66,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { GuidedTour, TourStep } from "@/components/GuidedTour";
 import appBackground from "@/assets/app-background.jpg";
 
-const PUBLISHED_URL = "https://indomitum.lovable.app";
+const PUBLISHED_URL = "https://indomitum.online";
 
 interface Seed {
   id: string;

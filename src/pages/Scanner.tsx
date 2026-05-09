@@ -193,7 +193,7 @@ const Scanner = () => {
                   try {
                     const parsed = new URL(url);
                     const allowedDomains = [
-                      'indomitum.lovable.app',
+                      'indomitum.online',
                       window.location.hostname,
                     ];
                     return allowedDomains.some(domain =>
