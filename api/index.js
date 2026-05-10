@@ -349,6 +349,26 @@ app.post("/auth/update-password", auth, async (req, res) => {
   }
 });
 
+app.delete("/auth/delete-account", auth, async (req, res) => {
+  try {
+    // Delete all user data in order
+    await pool.query("DELETE FROM order_status_history WHERE changed_by = $1", [req.user.id]);
+    await pool.query("DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE buyer_id = $1 OR collector_id = $1)", [req.user.id]);
+    await pool.query("DELETE FROM orders WHERE buyer_id = $1 OR collector_id = $1", [req.user.id]);
+    await pool.query("DELETE FROM buyer_seeds WHERE buyer_id = $1 OR assigned_by = $1", [req.user.id]);
+    await pool.query("DELETE FROM seed_history WHERE performed_by = $1", [req.user.id]);
+    await pool.query("DELETE FROM deleted_seeds WHERE deleted_by = $1 OR added_by = $1", [req.user.id]);
+    await pool.query("DELETE FROM seeds WHERE added_by = $1", [req.user.id]);
+    await pool.query("DELETE FROM user_roles WHERE user_id = $1", [req.user.id]);
+    await pool.query("DELETE FROM profiles WHERE user_id = $1", [req.user.id]);
+    await pool.query("DELETE FROM users WHERE id = $1", [req.user.id]);
+    res.json({ message: "Account deleted" });
+  } catch (err) {
+    console.error("Delete account error:", err);
+    res.status(500).json({ error: "Failed to delete account" });
+  }
+});
+
 // ══════════════════════════════════════════════════════════
 // PROFILE ROUTES
 // ══════════════════════════════════════════════════════════

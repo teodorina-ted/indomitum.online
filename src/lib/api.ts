@@ -92,6 +92,9 @@ export const api = {
       body: JSON.stringify({ password }),
     }),
 
+  deleteAccount: () =>
+    request("/auth/delete-account", { method: "DELETE" }),
+
   // Profiles
   getProfile: (userId: string) => request(`/profiles/${userId}`),
   updateProfile: (data: { full_name?: string; avatar_url?: string }) =>

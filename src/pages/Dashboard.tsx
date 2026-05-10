@@ -264,7 +264,7 @@ const Dashboard = () => {
   };
 
   const handleSelectAll = (checked: boolean) => {
-    if (checked) setSelectedSeeds(paginatedSeeds.map((s) => s.id));
+    if (checked) setSelectedSeeds(filteredSeeds.map((s) => s.id));
     else setSelectedSeeds([]);
   };
 
@@ -1281,7 +1281,7 @@ const Dashboard = () => {
                       style={{ width: columnWidths.checkbox }}
                     >
                       <Checkbox
-                        checked={selectedSeeds.length === paginatedSeeds.length && paginatedSeeds.length > 0}
+                        checked={selectedSeeds.length === filteredSeeds.length && filteredSeeds.length > 0}
                         onCheckedChange={handleSelectAll}
                         aria-label="Select all seeds"
                       />

@@ -78,7 +78,7 @@ const BarcodeModal = ({
         } catch (error) {
           console.error("Barcode generation error:", error);
         }
-      }, 50);
+      }, 300);
       
       return () => clearTimeout(timer);
     }

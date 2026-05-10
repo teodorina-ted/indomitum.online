@@ -180,8 +180,8 @@ const Login = () => {
             {viewMode === "reset" && "Enter your new password below"}
           </p>
 
-          {/* Role Toggle - Only show for login/signup */}
-          {(viewMode === "login" || viewMode === "signup") && (
+          {/* Role Toggle - Only show for signup */}
+          {viewMode === "signup" && (
             <div className="flex p-1 bg-muted rounded-lg mb-8">
               <button
                 type="button"
