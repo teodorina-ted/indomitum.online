@@ -502,6 +502,10 @@ app.delete("/seeds/:id", auth, async (req, res) => {
     if (seedRows.length === 0) return res.status(404).json({ error: "Seed not found" });
 
     const seed = seedRows[0];
+    
+    // Remove buyer_seeds references first to avoid FK constraint errors
+    await pool.query("DELETE FROM buyer_seeds WHERE seed_id = $1", [req.params.id]);
+
     await pool.query(
       `INSERT INTO deleted_seeds (original_id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, original_created_at, deleted_by, expires_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now() + interval '90 days')`,
@@ -533,6 +537,10 @@ app.post("/seeds/batch-delete", auth, async (req, res) => {
       if (rows.length === 0) continue;
 
       const seed = rows[0];
+      
+      // Remove buyer_seeds references first
+      await pool.query("DELETE FROM buyer_seeds WHERE seed_id = $1", [id]);
+
       await pool.query(
         `INSERT INTO deleted_seeds (original_id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, original_created_at, deleted_by, expires_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now() + interval '90 days')`,
@@ -895,7 +903,7 @@ app.get("/buyer-seeds/assigned-uuids", auth, async (req, res) => {
 
 app.post("/upload/seed-image", auth, upload.single("file"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
+  const baseUrl = process.env.PUBLIC_URL || `https://${req.get("host")}`;
   const url = `${baseUrl}/uploads/${req.file.filename}`;
   res.json({ url });
 });
