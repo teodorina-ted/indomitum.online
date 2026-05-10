@@ -106,6 +106,7 @@ const AddPlant = () => {
   const handleWebScan = async (result: string) => {
     const isValid = await validateDuplicateId(result);
     if (isValid) {
+      setShowWebScanner(false);
       setFormData(prev => ({ ...prev, id: result }));
       toast.success("Code scanned! Tap Continue to proceed.", { duration: 2000 });
     }
@@ -384,7 +385,7 @@ const AddPlant = () => {
 
             <div className="space-y-6">
               {/* Scanner always visible, auto-starts */}
-              {!formData.id && <WebScanner onScan={handleWebScan} autoStart />}
+              {!formData.id && showWebScanner !== false && <WebScanner onScan={handleWebScan} autoStart />}
 
               {/* Show scanned result */}
               {formData.id && (
