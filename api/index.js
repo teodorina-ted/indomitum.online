@@ -508,9 +508,10 @@ app.delete("/seeds/:id", auth, async (req, res) => {
 
     const seed = seedRows[0];
     
-    // Remove references first to avoid FK constraint errors
+    // Remove ALL references first to avoid FK constraint errors
     await pool.query("DELETE FROM buyer_seeds WHERE seed_id = $1", [req.params.id]);
     await pool.query("DELETE FROM order_items WHERE seed_id = $1", [req.params.id]);
+    await pool.query("DELETE FROM seed_history WHERE seed_id = $1", [req.params.id]);
 
     await pool.query(
       `INSERT INTO deleted_seeds (original_id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, original_created_at, deleted_by, expires_at)
@@ -544,9 +545,10 @@ app.post("/seeds/batch-delete", auth, async (req, res) => {
 
       const seed = rows[0];
       
-      // Remove references first to avoid FK constraint errors
+      // Remove ALL references first to avoid FK constraint errors
       await pool.query("DELETE FROM buyer_seeds WHERE seed_id = $1", [id]);
       await pool.query("DELETE FROM order_items WHERE seed_id = $1", [id]);
+      await pool.query("DELETE FROM seed_history WHERE seed_id = $1", [id]);
 
       await pool.query(
         `INSERT INTO deleted_seeds (original_id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, original_created_at, deleted_by, expires_at)
