@@ -123,7 +123,7 @@ const RecycleBin = () => {
     if (error) {
       toast.error("Failed to restore seeds");
     } else {
-      toast.success(`${selectedSeeds.length} seed(s) restored`);
+      toast.success(`${selectedSeeds.length} seed(s) restored`, { duration: 2000 });
       setDeletedSeeds(deletedSeeds.filter(s => !selectedSeeds.includes(s.id)));
       setSelectedSeeds([]);
     }
@@ -132,12 +132,17 @@ const RecycleBin = () => {
   const handlePermanentDelete = async () => {
     if (selectedSeeds.length === 0) return;
 
+    const confirmed = window.confirm(
+      `Permanently delete ${selectedSeeds.length} seed(s)? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
     const { error } = await api.permanentDeleteSeeds(selectedSeeds);
 
     if (error) {
       toast.error("Failed to permanently delete seeds");
     } else {
-      toast.success(`${selectedSeeds.length} seed(s) permanently deleted`);
+      toast.success(`${selectedSeeds.length} seed(s) permanently deleted`, { duration: 2000 });
       setDeletedSeeds(deletedSeeds.filter(s => !selectedSeeds.includes(s.id)));
       setSelectedSeeds([]);
     }

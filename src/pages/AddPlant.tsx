@@ -91,7 +91,7 @@ const AddPlant = () => {
           const isValid = await validateDuplicateId(scannedValue);
           if (isValid) {
             setFormData({ ...formData, id: scannedValue });
-            toast.success("Code scanned!");
+            toast.success("Code scanned!", { duration: 1500 });
           }
         }
       } finally {
@@ -130,7 +130,7 @@ const AddPlant = () => {
         image: result.file,
         imagePreview: result.dataUrl
       });
-      toast.success("Photo captured!");
+      toast.success("Photo captured!", { duration: 1500 });
     }
   };
 
@@ -142,7 +142,7 @@ const AddPlant = () => {
         image: result.file,
         imagePreview: result.dataUrl
       });
-      toast.success("Photo selected!");
+      toast.success("Photo selected!", { duration: 1500 });
     }
   };
 
@@ -215,7 +215,7 @@ const AddPlant = () => {
           console.warn("Reverse geocode failed", e);
         } finally {
           setGettingLocation(false);
-          toast.success("Location captured!");
+          toast.success("Location captured!", { duration: 1500 });
         }
       },
       (error) => {

@@ -276,22 +276,20 @@ const Dashboard = () => {
   const handleDelete = async () => {
     if (selectedSeeds.length === 0) return;
 
+    const confirmed = window.confirm(
+      `Move ${selectedSeeds.length} seed(s) to the recycle bin? They can be restored within 90 days.`
+    );
+    if (!confirmed) return;
+
     const seedsToDelete = seeds.filter((s) => selectedSeeds.includes(s.id));
 
-    // Move to deleted_seeds (bin) and add history
     for (const seed of seedsToDelete) {
       await api.deleteSeed(seed.id);
     }
 
-    const hasError = false; // errors handled inside deleteSeed
-
-    if (hasError) {
-      toast.error("Failed to delete seeds");
-    } else {
-      toast.success(`${selectedSeeds.length} seed(s) moved to bin`);
-      setSeeds(seeds.filter((s) => !selectedSeeds.includes(s.id)));
-      setSelectedSeeds([]);
-    }
+    toast.success(`${selectedSeeds.length} seed(s) moved to bin`, { duration: 2000 });
+    setSeeds(seeds.filter((s) => !selectedSeeds.includes(s.id)));
+    setSelectedSeeds([]);
   };
 
   const handleSignOut = async () => {
@@ -354,11 +352,15 @@ const Dashboard = () => {
     setCurrentPage(1);
   }, [searchQuery, columnFilters]);
 
-  // Onboarding/tour: show once per role
+  // Onboarding/tour: show only after signup, once per role
   useEffect(() => {
     try {
+      const isNewUser = localStorage.getItem("indomitum_new_user") === "true";
       const completed = localStorage.getItem(tourStorageKey) === "true";
-      if (!completed) setTourOpen(true);
+      if (isNewUser && !completed) {
+        localStorage.removeItem("indomitum_new_user");
+        setTourOpen(true);
+      }
     } catch {
       // ignore
     }
