@@ -424,16 +424,14 @@ const Login = () => {
       </div>
 
       {/* Right Panel - Visual */}
-      <div className="hidden lg:flex lg:w-1/2 bg-primary relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary/80" />
+      <div className="hidden lg:flex lg:w-1/2 bg-primary relative overflow-hidden items-center justify-center">        <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary/80" />
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-20 w-96 h-96 border border-primary-foreground/20 rounded-full" />
           <div className="absolute bottom-20 right-20 w-64 h-64 border border-primary-foreground/20 rounded-full" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] border border-primary-foreground/10 rounded-full" />
         </div>
         
-        <div className="relative z-10 flex flex-col justify-center items-center px-12 text-center">
-          <div className="w-20 h-20 rounded-2xl bg-primary-foreground/10 backdrop-blur flex items-center justify-center mb-8">
+    <div className="relative z-10 flex flex-col justify-center items-center px-12 text-center h-full">          <div className="w-20 h-20 rounded-2xl bg-primary-foreground/10 backdrop-blur flex items-center justify-center mb-8">
             <Leaf className="w-10 h-10 text-primary-foreground" />
           </div>
           <h2 className="text-3xl font-bold text-primary-foreground mb-4">
