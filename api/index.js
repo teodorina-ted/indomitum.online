@@ -35,7 +35,7 @@ app.use(globalLimiter);
 // Stricter auth rate limit: 10 attempts / 15 min per IP
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 50,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many login attempts, please try again later" },
@@ -393,7 +393,7 @@ app.post("/profiles/batch", auth, async (req, res) => {
 
 app.get("/seeds", auth, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM seeds ORDER BY created_at DESC");
+    const { rows } = await pool.query("SELECT * FROM seeds WHERE added_by = $1 ORDER BY created_at DESC", [req.user.id]);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -402,7 +402,7 @@ app.get("/seeds", auth, async (req, res) => {
 
 app.get("/seeds/by-seed-id/:seedId", auth, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM seeds WHERE seed_id = $1", [req.params.seedId]);
+    const { rows } = await pool.query("SELECT * FROM seeds WHERE seed_id = $1 AND added_by = $2", [req.params.seedId, req.user.id]);
     res.json(rows[0] || null);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -411,7 +411,7 @@ app.get("/seeds/by-seed-id/:seedId", auth, async (req, res) => {
 
 app.get("/seeds/exists/:seedId", auth, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT id FROM seeds WHERE seed_id = $1 LIMIT 1", [req.params.seedId]);
+    const { rows } = await pool.query("SELECT id FROM seeds WHERE seed_id = $1 AND added_by = $2 LIMIT 1", [req.params.seedId, req.user.id]);
     res.json(rows[0] || null);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -733,7 +733,7 @@ app.get("/seeds/:id/history", auth, async (req, res) => {
 app.get("/bin", auth, async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
   try {
-    const { rows } = await pool.query("SELECT * FROM deleted_seeds ORDER BY deleted_at DESC");
+    const { rows } = await pool.query("SELECT * FROM deleted_seeds WHERE deleted_by = $1 OR added_by = $1 ORDER BY deleted_at DESC", [req.user.id]);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
