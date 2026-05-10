@@ -436,7 +436,7 @@ app.get("/seeds/by-seed-id/:seedId", auth, async (req, res) => {
 
 app.get("/seeds/exists/:seedId", auth, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT id FROM seeds WHERE seed_id = $1 AND added_by = $2 LIMIT 1", [req.params.seedId, req.user.id]);
+    const { rows } = await pool.query("SELECT id FROM seeds WHERE seed_id = $1 LIMIT 1", [req.params.seedId]);
     res.json(rows[0] || null);
   } catch (err) {
     res.status(500).json({ error: err.message });
