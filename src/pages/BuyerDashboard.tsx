@@ -88,8 +88,6 @@ interface SeedPassport {
 }
 
 // Favorites stored locally
-const FAVORITES_KEY = "indomitum_buyer_favorites";
-
 const BuyerDashboard = () => {
   const { user, profile, signOut, isLoading: authLoading, isCollector } = useAuth();
   const navigate = useNavigate();
@@ -131,17 +129,18 @@ const BuyerDashboard = () => {
   const [pendingSeedIdToUuid, setPendingSeedIdToUuid] = useState<Record<string, string>>({});
   const [pendingAssignedUuids, setPendingAssignedUuids] = useState<Set<string>>(new Set());
 
-  // Load favorites from localStorage
+  // Load favorites from DB
   useEffect(() => {
-    const stored = localStorage.getItem(FAVORITES_KEY);
-    if (stored) {
-      try {
-        setFavorites(JSON.parse(stored));
-      } catch {
-        setFavorites([]);
+    if (!user) return;
+    api.getBuyerSeeds().then(({ data }) => {
+      if (data) {
+        const favSeeds = data
+          .map((bs: any) => bs.seeds)
+          .filter(Boolean);
+        setFavorites(favSeeds);
       }
-    }
-  }, []);
+    });
+  }, [user]);
 
   useEffect(() => {
     try {
@@ -152,21 +151,26 @@ const BuyerDashboard = () => {
     }
   }, []);
 
-  // Save favorites to localStorage
-  const saveFavorites = (newFavorites: SeedPassport[]) => {
-    setFavorites(newFavorites);
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(newFavorites));
-  };
-
   const isFavorite = (seedId: string) => favorites.some(f => f.seed_id === seedId);
 
-  const toggleFavorite = (seed: SeedPassport) => {
+  const toggleFavorite = async (seed: SeedPassport) => {
     if (isFavorite(seed.seed_id)) {
-      saveFavorites(favorites.filter(f => f.seed_id !== seed.seed_id));
-      toast.success("Removed from favorites");
+      // find the buyer_seed id to delete it
+      const { data: bsData } = await api.getBuyerSeeds();
+      const match = bsData?.find((bs: any) => bs.seeds?.seed_id === seed.seed_id || bs.seeds?.id === seed.id);
+      if (match) {
+        await api.removeBuyerSeed(match.id);
+      }
+      setFavorites(prev => prev.filter(f => f.seed_id !== seed.seed_id));
+      toast.success("Removed from saved seeds");
     } else {
-      saveFavorites([...favorites, seed]);
-      toast.success("Added to favorites!");
+      const { error } = await api.assignBuyerSeed({ seed_id: seed.id, quantity: 1 });
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      setFavorites(prev => [...prev, seed]);
+      toast.success("Added to saved seeds!");
     }
   };
 

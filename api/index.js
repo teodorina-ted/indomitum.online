@@ -20,27 +20,26 @@ const app = express();
 
 app.set("trust proxy", 1);
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
+
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+  : ["http://localhost:5173", "https://indomitum.online", "https://www.indomitum.online"];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+}));
+
 app.use(express.json({ limit: "1mb" }));
 
-// Global rate limit: 100 requests / 15 min per IP
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many requests, please try again later" },
-});
+const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
 app.use(globalLimiter);
 
-// Stricter auth rate limit: 10 attempts / 15 min per IP
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 50,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many login attempts, please try again later" },
-});
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: { error: "Too many login attempts, please try again later" } });
 
 // ══════════════════════════════════════════════════════════
 // CONFIG
@@ -48,48 +47,37 @@ const authLimiter = rateLimit({
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const JWT_SECRET = process.env.JWT_SECRET;
-
-// R2 Storage client
-const r2Client = process.env.R2_ACCESS_KEY_ID ? new S3Client({
-  region: "auto",
-  endpoint: process.env.R2_ENDPOINT,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-}) : null;
 if (!JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is required. Generate one with: openssl rand -hex 64');
+  console.error("FATAL: JWT_SECRET is required. Generate with: openssl rand -hex 64");
   process.exit(1);
 }
 const TOKEN_EXPIRY = "7d";
 const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
-
-// Ensure upload directory exists
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const r2Client = process.env.R2_ACCESS_KEY_ID ? new S3Client({
+  region: "auto",
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY },
+}) : null;
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = /jpeg|jpg|png|gif|webp/;
-    if (allowed.test(file.mimetype) && allowed.test(path.extname(file.originalname).toLowerCase().replace(".", ""))) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only image files are allowed"));
-    }
+    if (allowed.test(file.mimetype)) return cb(null, true);
+    cb(new Error("Only image files are allowed"));
   },
 });
 
-// Serve uploaded files
 app.use("/uploads", express.static(UPLOAD_DIR));
 
 // ══════════════════════════════════════════════════════════
 // PROMETHEUS METRICS
 // ══════════════════════════════════════════════════════════
 
-const collectDefaultMetrics = promClient.collectDefaultMetrics;
-collectDefaultMetrics({ prefix: "indomitum_" });
+promClient.collectDefaultMetrics({ prefix: "indomitum_" });
 
 const httpRequestDuration = new promClient.Histogram({
   name: "indomitum_http_request_duration_seconds",
@@ -104,7 +92,6 @@ const httpRequestTotal = new promClient.Counter({
   labelNames: ["method", "route", "status_code"],
 });
 
-// Metrics middleware
 app.use((req, res, next) => {
   const end = httpRequestDuration.startTimer();
   res.on("finish", () => {
@@ -116,39 +103,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── Health Check Endpoint ────────────────────────────────
-
-app.get("/health", async (_req, res) => {
-  const checks = { status: "ok", timestamp: new Date().toISOString(), uptime: process.uptime(), services: {} };
-  
-  // PostgreSQL
-  try {
-    const start = Date.now();
-    await pool.query("SELECT 1");
-    checks.services.postgres = { status: "healthy", latency_ms: Date.now() - start };
-  } catch (err) {
-    checks.status = "degraded";
-    checks.services.postgres = { status: "unhealthy", error: err.message };
-  }
-
-  // MongoDB (if configured)
-  if (process.env.MONGO_URL) {
-    checks.services.mongodb = { status: "not_checked", note: "MongoDB client not initialized in this version" };
-  }
-
-  const statusCode = checks.status === "ok" ? 200 : 503;
-  res.status(statusCode).json(checks);
-});
-
-// ── Prometheus Metrics Endpoint ──────────────────────────
-
-app.get("/metrics", async (_req, res) => {
-  res.set("Content-Type", promClient.register.contentType);
-  res.end(await promClient.register.metrics());
-});
-
 // ══════════════════════════════════════════════════════════
-// VALIDATION SCHEMAS (Zod)
+// VALIDATION SCHEMAS
 // ══════════════════════════════════════════════════════════
 
 const signupSchema = z.object({
@@ -156,6 +112,8 @@ const signupSchema = z.object({
   password: z.string().min(6).max(128),
   full_name: z.string().trim().min(1).max(100),
   role: z.enum(["collector", "buyer"]).optional(),
+  organization_name: z.string().trim().max(100).optional(),
+  organization_id: z.string().uuid().optional(),
 });
 
 const loginSchema = z.object({
@@ -191,44 +149,38 @@ const orderSchema = z.object({
 });
 
 const statusSchema = z.object({
-  status: z.enum([
-    "requested", "invoice_sent", "confirmed", "preparing",
-    "shipped", "ready_pickup", "delivered", "completed", "cancelled",
-  ]),
+  status: z.enum(["requested", "invoice_sent", "confirmed", "preparing",
+    "shipped", "ready_pickup", "delivered", "completed", "cancelled"]),
   notes: z.string().max(2000).nullable().optional(),
+  tracking_code: z.string().max(200).nullable().optional(),
+  tracking_url: z.string().url().max(1000).nullable().optional(),
 });
 
-// Validate middleware factory
+// ══════════════════════════════════════════════════════════
+// MIDDLEWARE HELPERS
+// ══════════════════════════════════════════════════════════
+
 function validate(schema) {
   return (req, res, next) => {
     const result = schema.safeParse(req.body);
-    if (!result.success) {
-      const errors = result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
-      return res.status(400).json({ error: "Validation failed", details: errors });
-    }
+    if (!result.success) return res.status(400).json({ error: result.error.errors[0].message });
     req.body = result.data;
     next();
   };
 }
 
-// ── Helpers ──────────────────────────────────────────────
-
-function generateToken(user) {
-  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
-}
-
-// ── Auth Middleware ──────────────────────────────────────
-
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) return res.status(401).json({ error: "No token provided" });
-
+  if (!header?.startsWith("Bearer ")) return res.status(401).json({ error: "Unauthorized" });
   try {
-    const decoded = jwt.verify(header.split(" ")[1], JWT_SECRET);
-    req.user = decoded;
+    const payload = jwt.verify(header.slice(7), JWT_SECRET);
+    req.user = payload;
+    // Attach org_id to every request
+    const { rows } = await pool.query("SELECT organization_id FROM users WHERE id = $1", [payload.id]);
+    req.user.organization_id = rows[0]?.organization_id || null;
     next();
   } catch {
-    return res.status(401).json({ error: "Invalid or expired token" });
+    res.status(401).json({ error: "Invalid or expired token" });
   }
 }
 
@@ -236,148 +188,147 @@ async function requireRole(req, res, roles) {
   const { rows } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]);
   const userRoles = rows.map((r) => r.role);
   if (!roles.some((r) => userRoles.includes(r))) {
-    res.status(403).json({ error: "Insufficient permissions" });
+    res.status(403).json({ error: "Forbidden" });
     return false;
   }
   return true;
 }
 
-// ── Health ───────────────────────────────────────────────
+// ── Health & Metrics ────────────────────────────────────
 
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/health", async (_req, res) => {
+  const checks = { status: "ok", timestamp: new Date().toISOString(), uptime: process.uptime(), services: {} };
+  try {
+    const start = Date.now();
+    await pool.query("SELECT 1");
+    checks.services.postgres = { status: "healthy", latency_ms: Date.now() - start };
+  } catch (err) {
+    checks.status = "degraded";
+    checks.services.postgres = { status: "unhealthy", error: err.message };
+  }
+  res.status(checks.status === "ok" ? 200 : 503).json(checks);
+});
+
+app.get("/metrics", async (_req, res) => {
+  res.set("Content-Type", promClient.register.contentType);
+  res.end(await promClient.register.metrics());
+});
 
 // ══════════════════════════════════════════════════════════
-// AUTH ROUTES
+// AUTH
 // ══════════════════════════════════════════════════════════
 
 app.post("/auth/signup", authLimiter, validate(signupSchema), async (req, res) => {
-  const { email, password, full_name, role } = req.body;
-
+  const { email, password, full_name, role, organization_name, organization_id } = req.body;
   try {
-    const hash = await bcrypt.hash(password, 12);
+    const { rows: existing } = await pool.query("SELECT id FROM users WHERE email = $1", [email.toLowerCase()]);
+    if (existing.length) return res.status(409).json({ error: "Email already registered" });
+
+    const password_hash = await bcrypt.hash(password, 12);
+
+    // Resolve organization
+    let orgId = null;
+    if (organization_id) {
+      const { rows: org } = await pool.query("SELECT id FROM organizations WHERE id = $1", [organization_id]);
+      if (org.length) orgId = org[0].id;
+    } else if (organization_name && role !== "buyer") {
+      const { rows: org } = await pool.query(
+        "INSERT INTO organizations (name) VALUES ($1) RETURNING id", [organization_name]
+      );
+      orgId = org[0].id;
+    }
+
     const { rows } = await pool.query(
-      "INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, created_at",
-      [email.toLowerCase().trim(), hash]
+      "INSERT INTO users (email, password_hash, organization_id) VALUES ($1, $2, $3) RETURNING id, email",
+      [email.toLowerCase(), password_hash, orgId]
     );
     const user = rows[0];
 
-    await pool.query(
-      "INSERT INTO profiles (user_id, full_name, email) VALUES ($1, $2, $3)",
-      [user.id, full_name, user.email]
+    const assignedRole = role || "collector";
+    await pool.query("INSERT INTO user_roles (user_id, role) VALUES ($1, $2)", [user.id, assignedRole]);
+
+    const { rows: profileRows } = await pool.query(
+      "INSERT INTO profiles (user_id, full_name, email) VALUES ($1, $2, $3) RETURNING *",
+      [user.id, full_name, email.toLowerCase()]
     );
 
-    if (role) {
-      await pool.query("INSERT INTO user_roles (user_id, role) VALUES ($1, $2)", [user.id, role]);
-    }
-
-    const token = generateToken(user);
-
-    const { rows: profiles } = await pool.query("SELECT * FROM profiles WHERE user_id = $1", [user.id]);
-    const { rows: roles } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [user.id]);
-
-    res.status(201).json({
-      user: { id: user.id, email: user.email },
-      profile: profiles[0] || null,
-      roles: roles.map((r) => r.role),
-      token,
-    });
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+    res.status(201).json({ user: { id: user.id, email: user.email }, profile: profileRows[0], roles: [assignedRole], token });
   } catch (err) {
-    if (err.code === "23505") return res.status(409).json({ error: "Email already registered" });
-    console.error(err);
-    res.status(500).json({ error: "Signup failed" });
+    console.error("Signup error:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.post("/auth/login", authLimiter, validate(loginSchema), async (req, res) => {
   const { email, password } = req.body;
-
   try {
-    const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [email.toLowerCase().trim()]);
-    if (rows.length === 0) return res.status(401).json({ error: "Invalid credentials" });
-
+    const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [email.toLowerCase()]);
+    if (!rows.length) return res.status(401).json({ error: "Invalid email or password" });
     const user = rows[0];
+
     const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) return res.status(401).json({ error: "Invalid credentials" });
+    if (!valid) return res.status(401).json({ error: "Invalid email or password" });
 
-    const token = generateToken(user);
+    const { rows: roleRows } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [user.id]);
+    const { rows: profileRows } = await pool.query("SELECT * FROM profiles WHERE user_id = $1", [user.id]);
 
-    const { rows: profiles } = await pool.query("SELECT * FROM profiles WHERE user_id = $1", [user.id]);
-    const { rows: roles } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [user.id]);
-
-    res.json({
-      user: { id: user.id, email: user.email },
-      profile: profiles[0] || null,
-      roles: roles.map((r) => r.role),
-      token,
-    });
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+    res.json({ user: { id: user.id, email: user.email }, profile: profileRows[0] || null, roles: roleRows.map((r) => r.role), token });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Login failed" });
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.get("/auth/me", auth, async (req, res) => {
   try {
-    const { rows: profiles } = await pool.query("SELECT * FROM profiles WHERE user_id = $1", [req.user.id]);
-    const { rows: roles } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]);
-    res.json({
-      user: { id: req.user.id, email: req.user.email },
-      profile: profiles[0] || null,
-      roles: roles.map((r) => r.role),
-    });
+    const { rows: profileRows } = await pool.query("SELECT * FROM profiles WHERE user_id = $1", [req.user.id]);
+    const { rows: roleRows } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]);
+    res.json({ user: { id: req.user.id, email: req.user.email }, profile: profileRows[0] || null, roles: roleRows.map((r) => r.role) });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch user" });
+    res.status(500).json({ error: err.message });
   }
 });
 
-app.post("/auth/reset-password", authLimiter, async (req, res) => {
-  // Placeholder — in a real setup send an email with a reset link
+app.post("/auth/reset-password", authLimiter, async (_req, res) => {
   res.json({ message: "If that email exists, a reset link has been sent." });
 });
 
 app.post("/auth/update-password", auth, async (req, res) => {
-  const { password } = req.body;
-  if (!password || password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
-
+  const { current_password, new_password } = req.body;
+  if (!new_password || new_password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
   try {
-    const hash = await bcrypt.hash(password, 12);
+    const { rows } = await pool.query("SELECT password_hash FROM users WHERE id = $1", [req.user.id]);
+    if (!rows.length) return res.status(404).json({ error: "User not found" });
+    if (current_password) {
+      const valid = await bcrypt.compare(current_password, rows[0].password_hash);
+      if (!valid) return res.status(401).json({ error: "Current password is incorrect" });
+    }
+    const hash = await bcrypt.hash(new_password, 12);
     await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [hash, req.user.id]);
     res.json({ message: "Password updated" });
   } catch (err) {
-    res.status(500).json({ error: "Failed to update password" });
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.delete("/auth/delete-account", auth, async (req, res) => {
   try {
-    // Delete all user data in order
-    await pool.query("DELETE FROM order_status_history WHERE changed_by = $1", [req.user.id]);
-    await pool.query("DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE buyer_id = $1 OR collector_id = $1)", [req.user.id]);
-    await pool.query("DELETE FROM orders WHERE buyer_id = $1 OR collector_id = $1", [req.user.id]);
-    await pool.query("DELETE FROM buyer_seeds WHERE buyer_id = $1 OR assigned_by = $1", [req.user.id]);
-    await pool.query("DELETE FROM seed_history WHERE performed_by = $1", [req.user.id]);
-    await pool.query("DELETE FROM deleted_seeds WHERE deleted_by = $1 OR added_by = $1", [req.user.id]);
-    await pool.query("DELETE FROM seeds WHERE added_by = $1", [req.user.id]);
-    await pool.query("DELETE FROM user_roles WHERE user_id = $1", [req.user.id]);
-    await pool.query("DELETE FROM profiles WHERE user_id = $1", [req.user.id]);
     await pool.query("DELETE FROM users WHERE id = $1", [req.user.id]);
     res.json({ message: "Account deleted" });
   } catch (err) {
-    console.error("Delete account error:", err);
-    res.status(500).json({ error: "Failed to delete account" });
+    res.status(500).json({ error: err.message });
   }
 });
 
 // ══════════════════════════════════════════════════════════
-// PROFILE ROUTES
+// PROFILES
 // ══════════════════════════════════════════════════════════
 
 app.get("/profiles/:userId", auth, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM profiles WHERE user_id = $1", [req.params.userId]);
-    if (rows.length === 0) return res.status(404).json({ error: "Profile not found" });
-    res.json(rows[0]);
+    res.json(rows[0] || null);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -387,8 +338,12 @@ app.put("/profiles", auth, async (req, res) => {
   const { full_name, avatar_url } = req.body;
   try {
     const { rows } = await pool.query(
-      "UPDATE profiles SET full_name = COALESCE($1, full_name), avatar_url = COALESCE($2, avatar_url), updated_at = now() WHERE user_id = $3 RETURNING *",
-      [full_name, avatar_url, req.user.id]
+      `INSERT INTO profiles (user_id, full_name, email, avatar_url)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id) DO UPDATE SET full_name = COALESCE($2, profiles.full_name),
+         avatar_url = COALESCE($4, profiles.avatar_url), updated_at = now()
+       RETURNING *`,
+      [req.user.id, full_name, req.user.email, avatar_url]
     );
     res.json(rows[0]);
   } catch (err) {
@@ -398,13 +353,48 @@ app.put("/profiles", auth, async (req, res) => {
 
 app.post("/profiles/batch", auth, async (req, res) => {
   const { user_ids } = req.body;
-  if (!Array.isArray(user_ids) || user_ids.length === 0) return res.json([]);
-
+  if (!Array.isArray(user_ids) || !user_ids.length) return res.json({});
   try {
-    const placeholders = user_ids.map((_, i) => `$${i + 1}`).join(",");
+    const safe = user_ids.slice(0, 200);
+    const placeholders = safe.map((_, i) => `$${i + 1}`).join(",");
     const { rows } = await pool.query(
-      `SELECT user_id, full_name FROM profiles WHERE user_id IN (${placeholders})`,
-      user_ids
+      `SELECT user_id, full_name FROM profiles WHERE user_id IN (${placeholders})`, safe
+    );
+    const map = {};
+    rows.forEach((r) => { map[r.user_id] = r.full_name; });
+    res.json(map);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// ORGANIZATIONS
+// ══════════════════════════════════════════════════════════
+
+// Get my organization info
+app.get("/organizations/mine", auth, async (req, res) => {
+  if (!req.user.organization_id) return res.json(null);
+  try {
+    const { rows } = await pool.query("SELECT * FROM organizations WHERE id = $1", [req.user.organization_id]);
+    res.json(rows[0] || null);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get members of my organization
+app.get("/organizations/mine/members", auth, async (req, res) => {
+  if (!req.user.organization_id) return res.json([]);
+  try {
+    const { rows } = await pool.query(
+      `SELECT u.id, u.email, u.created_at, p.full_name, ur.role
+       FROM users u
+       LEFT JOIN profiles p ON p.user_id = u.id
+       LEFT JOIN user_roles ur ON ur.user_id = u.id
+       WHERE u.organization_id = $1
+       ORDER BY u.created_at ASC`,
+      [req.user.organization_id]
     );
     res.json(rows);
   } catch (err) {
@@ -412,42 +402,84 @@ app.post("/profiles/batch", auth, async (req, res) => {
   }
 });
 
+// Join an existing org by ID (collectors only)
+app.post("/organizations/join", auth, async (req, res) => {
+  if (!(await requireRole(req, res, ["collector", "admin"]))) return;
+  const { organization_id } = req.body;
+  if (!organization_id) return res.status(400).json({ error: "organization_id required" });
+  try {
+    const { rows } = await pool.query("SELECT id FROM organizations WHERE id = $1", [organization_id]);
+    if (!rows.length) return res.status(404).json({ error: "Organization not found" });
+    await pool.query("UPDATE users SET organization_id = $1 WHERE id = $2", [organization_id, req.user.id]);
+    res.json({ message: "Joined organization" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ══════════════════════════════════════════════════════════
-// SEEDS CRUD
+// SEEDS
+// All seed queries scoped to org (or user if no org)
 // ══════════════════════════════════════════════════════════
+
+// Helper: build WHERE clause for seed ownership (org or user)
+function seedOwnershipWhere(orgId, userId) {
+  if (orgId) {
+    return { clause: "organization_id = $1", params: [orgId] };
+  }
+  return { clause: "added_by = $1 AND organization_id IS NULL", params: [userId] };
+}
 
 app.get("/seeds", auth, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM seeds WHERE added_by = $1 ORDER BY created_at DESC", [req.user.id]);
+    const { clause, params } = seedOwnershipWhere(req.user.organization_id, req.user.id);
+    const { rows } = await pool.query(`SELECT * FROM seeds WHERE ${clause} ORDER BY created_at DESC`, params);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get("/seeds/by-seed-id/:seedId", auth, async (req, res) => {
-  try {
-    const { rows } = await pool.query("SELECT * FROM seeds WHERE seed_id = $1 AND added_by = $2", [req.params.seedId, req.user.id]);
-    res.json(rows[0] || null);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
+// Check if seed_id already exists within this org/user scope
 app.get("/seeds/exists/:seedId", auth, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT id FROM seeds WHERE seed_id = $1 LIMIT 1", [req.params.seedId]);
+    const { clause, params } = seedOwnershipWhere(req.user.organization_id, req.user.id);
+    const { rows } = await pool.query(
+      `SELECT id FROM seeds WHERE seed_id = $${params.length + 1} AND ${clause} LIMIT 1`,
+      [...params, req.params.seedId]
+    );
     res.json(rows[0] || null);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
+// Lookup by seed_id string (for buyer QR scan — cross-org, any collector's seed)
+app.get("/seeds/by-seed-id/:seedId", auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM seeds WHERE seed_id = $1 LIMIT 1", [req.params.seedId]);
+    res.json(rows[0] || null);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get single seed — scoped ownership check
 app.get("/seeds/:id", auth, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM seeds WHERE id = $1", [req.params.id]);
-    if (rows.length === 0) return res.status(404).json({ error: "Seed not found" });
-    res.json(rows[0]);
+    if (!rows.length) return res.status(404).json({ error: "Seed not found" });
+    const seed = rows[0];
+    // Ownership: org members can see org seeds; buyers can see any seed (for passport)
+    const { rows: roleRows } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]);
+    const isBuyer = roleRows.some((r) => r.role === "buyer");
+    const isAdmin = roleRows.some((r) => r.role === "admin");
+    if (!isBuyer && !isAdmin) {
+      const sameOrg = req.user.organization_id && seed.organization_id === req.user.organization_id;
+      const ownedByUser = !seed.organization_id && seed.added_by === req.user.id;
+      if (!sameOrg && !ownedByUser) return res.status(403).json({ error: "Forbidden" });
+    }
+    res.json(seed);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -459,14 +491,24 @@ app.post("/seeds", auth, validate(seedSchema), async (req, res) => {
   const { seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code } = req.body;
 
   try {
+    // Duplicate check within scope
+    const { clause, params } = seedOwnershipWhere(req.user.organization_id, req.user.id);
+    const { rows: dup } = await pool.query(
+      `SELECT id FROM seeds WHERE seed_id = $${params.length + 1} AND ${clause}`,
+      [...params, seed_id]
+    );
+    if (dup.length) return res.status(409).json({ error: "This seed ID already exists in your collection" });
+
     const { rows } = await pool.query(
-      `INSERT INTO seeds (seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [seed_id, name, quantity || 0, notes, image_url, latitude, longitude, street, city, country, zip_code, req.user.id]
+      `INSERT INTO seeds (seed_id, name, quantity, notes, image_url, latitude, longitude,
+        street, city, country, zip_code, added_by, organization_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [seed_id, name, quantity || 0, notes, image_url, latitude, longitude,
+        street, city, country, zip_code, req.user.id, req.user.organization_id]
     );
 
     await pool.query(
-      "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1, $2, $3, $4)",
+      "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1,$2,$3,$4)",
       [rows[0].id, "created", JSON.stringify(rows[0]), req.user.id]
     );
 
@@ -478,15 +520,11 @@ app.post("/seeds", auth, validate(seedSchema), async (req, res) => {
 
 app.post("/seeds/lookup-ids", auth, async (req, res) => {
   const { seed_ids } = req.body;
-  if (!Array.isArray(seed_ids) || seed_ids.length === 0) return res.json({});
-
+  if (!Array.isArray(seed_ids) || !seed_ids.length) return res.json({});
   try {
-    const safeIds = seed_ids.slice(0, 1000);
-    const placeholders = safeIds.map((_, i) => `$${i + 1}`).join(",");
-    const { rows } = await pool.query(
-      `SELECT id, seed_id FROM seeds WHERE seed_id IN (${placeholders})`,
-      safeIds
-    );
+    const safe = seed_ids.slice(0, 1000);
+    const placeholders = safe.map((_, i) => `$${i + 1}`).join(",");
+    const { rows } = await pool.query(`SELECT id, seed_id FROM seeds WHERE seed_id IN (${placeholders})`, safe);
     const map = {};
     rows.forEach((r) => { map[r.seed_id] = r.id; });
     res.json(map);
@@ -497,22 +535,21 @@ app.post("/seeds/lookup-ids", auth, async (req, res) => {
 
 app.put("/seeds/:id", auth, async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
-
   const { name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code } = req.body;
   try {
     const { rows } = await pool.query(
-      `UPDATE seeds SET name=COALESCE($1,name), quantity=COALESCE($2,quantity), notes=$3, image_url=COALESCE($4,image_url),
-       latitude=$5, longitude=$6, street=$7, city=$8, country=$9, zip_code=$10, updated_at=now()
+      `UPDATE seeds SET name=COALESCE($1,name), quantity=COALESCE($2,quantity), notes=$3,
+        image_url=COALESCE($4,image_url), latitude=$5, longitude=$6, street=$7, city=$8,
+        country=$9, zip_code=$10, updated_at=now()
        WHERE id=$11 RETURNING *`,
       [name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, req.params.id]
     );
-    if (rows.length === 0) return res.status(404).json({ error: "Seed not found" });
+    if (!rows.length) return res.status(404).json({ error: "Seed not found" });
 
     await pool.query(
-      "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1, $2, $3, $4)",
+      "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1,$2,$3,$4)",
       [req.params.id, "updated", JSON.stringify(req.body), req.user.id]
     );
-
     res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -521,92 +558,120 @@ app.put("/seeds/:id", auth, async (req, res) => {
 
 app.delete("/seeds/:id", auth, async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
-
   try {
     const { rows: seedRows } = await pool.query("SELECT * FROM seeds WHERE id = $1", [req.params.id]);
-    if (seedRows.length === 0) return res.status(404).json({ error: "Seed not found" });
-
+    if (!seedRows.length) return res.status(404).json({ error: "Seed not found" });
     const seed = seedRows[0];
-    
-    // Remove ALL references first to avoid FK constraint errors
+
+    await pool.query("BEGIN");
     await pool.query("DELETE FROM buyer_seeds WHERE seed_id = $1", [req.params.id]);
     await pool.query("DELETE FROM order_items WHERE seed_id = $1", [req.params.id]);
-    await pool.query("DELETE FROM seed_history WHERE seed_id = $1", [req.params.id]);
 
     await pool.query(
-      `INSERT INTO deleted_seeds (original_id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, original_created_at, deleted_by, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now() + interval '90 days')`,
-      [seed.id, seed.seed_id, seed.name, seed.quantity, seed.notes, seed.image_url, seed.latitude, seed.longitude, seed.street, seed.city, seed.country, seed.zip_code, seed.added_by, seed.created_at, req.user.id]
+      `INSERT INTO deleted_seeds (original_id, seed_id, name, quantity, notes, image_url,
+        latitude, longitude, street, city, country, zip_code, added_by, organization_id,
+        original_created_at, deleted_by, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now() + interval '90 days')`,
+      [seed.id, seed.seed_id, seed.name, seed.quantity, seed.notes, seed.image_url,
+        seed.latitude, seed.longitude, seed.street, seed.city, seed.country, seed.zip_code,
+        seed.added_by, seed.organization_id, seed.created_at, req.user.id]
     );
 
     await pool.query("DELETE FROM seeds WHERE id = $1", [req.params.id]);
 
     await pool.query(
-      "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1, $2, $3, $4)",
+      "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1,$2,$3,$4)",
       [seed.id, "deleted", JSON.stringify(seed), req.user.id]
     );
-
+    await pool.query("COMMIT");
     res.json({ message: "Seed moved to recycle bin" });
   } catch (err) {
+    await pool.query("ROLLBACK");
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post("/seeds/batch-delete", auth, async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
-
   const { ids } = req.body;
-  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids required" });
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "ids required" });
 
   try {
-    for (const id of ids) {
-      const { rows } = await pool.query("SELECT * FROM seeds WHERE id = $1", [id]);
-      if (rows.length === 0) continue;
+    await pool.query("BEGIN");
 
-      const seed = rows[0];
-      
-      // Remove ALL references first to avoid FK constraint errors
-      await pool.query("DELETE FROM buyer_seeds WHERE seed_id = $1", [id]);
-      await pool.query("DELETE FROM order_items WHERE seed_id = $1", [id]);
-      await pool.query("DELETE FROM seed_history WHERE seed_id = $1", [id]);
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
+    const { rows: seeds } = await pool.query(`SELECT * FROM seeds WHERE id IN (${placeholders})`, ids);
+
+    if (seeds.length) {
+      // Bulk remove references
+      await pool.query(`DELETE FROM buyer_seeds WHERE seed_id IN (${placeholders})`, ids);
+      await pool.query(`DELETE FROM order_items WHERE seed_id IN (${placeholders})`, ids);
+
+      // Bulk insert into deleted_seeds
+      const insertValues = seeds.map((_, i) => {
+        const base = i * 16;
+        return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9},$${base+10},$${base+11},$${base+12},$${base+13},$${base+14},$${base+15},$${base+16}, now() + interval '90 days')`;
+      }).join(",");
+
+      const insertParams = seeds.flatMap((s) => [
+        s.id, s.seed_id, s.name, s.quantity, s.notes, s.image_url,
+        s.latitude, s.longitude, s.street, s.city, s.country, s.zip_code,
+        s.added_by, s.organization_id, s.created_at, req.user.id
+      ]);
 
       await pool.query(
-        `INSERT INTO deleted_seeds (original_id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, original_created_at, deleted_by, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now() + interval '90 days')`,
-        [seed.id, seed.seed_id, seed.name, seed.quantity, seed.notes, seed.image_url, seed.latitude, seed.longitude, seed.street, seed.city, seed.country, seed.zip_code, seed.added_by, seed.created_at, req.user.id]
+        `INSERT INTO deleted_seeds (original_id, seed_id, name, quantity, notes, image_url,
+          latitude, longitude, street, city, country, zip_code, added_by, organization_id,
+          original_created_at, deleted_by, expires_at) VALUES ${insertValues}`,
+        insertParams
       );
 
-      await pool.query("DELETE FROM seeds WHERE id = $1", [id]);
+      await pool.query(`DELETE FROM seeds WHERE id IN (${placeholders})`, ids);
 
+      const historyValues = seeds.map((_, i) => `($${i*4+1},$${i*4+2},$${i*4+3},$${i*4+4})`).join(",");
+      const historyParams = seeds.flatMap((s) => [s.id, "deleted", JSON.stringify(s), req.user.id]);
       await pool.query(
-        "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1, $2, $3, $4)",
-        [seed.id, "deleted", JSON.stringify(seed), req.user.id]
+        `INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ${historyValues}`,
+        historyParams
       );
     }
 
-    res.json({ message: `${ids.length} seed(s) moved to recycle bin` });
+    await pool.query("COMMIT");
+    res.json({ message: `${seeds.length} seed(s) moved to recycle bin` });
   } catch (err) {
+    await pool.query("ROLLBACK");
     res.status(500).json({ error: err.message });
   }
 });
 
 // ══════════════════════════════════════════════════════════
-// ORDERS CRUD
+// ORDERS
 // ══════════════════════════════════════════════════════════
 
 app.get("/orders", auth, async (req, res) => {
   try {
-    const { rows: roles } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]);
-    const isAdminOrCollector = roles.some((r) => ["admin", "collector"].includes(r.role));
+    const { rows: roleRows } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]);
+    const isAdmin = roleRows.some((r) => r.role === "admin");
+    const isCollector = roleRows.some((r) => r.role === "collector");
 
     let query, params;
-    if (isAdminOrCollector) {
+    if (isAdmin) {
       query = "SELECT * FROM orders ORDER BY created_at DESC";
       params = [];
+    } else if (isCollector) {
+      // Collector sees orders for their org, or orders linked to them directly
+      if (req.user.organization_id) {
+        query = "SELECT * FROM orders WHERE organization_id = $1 ORDER BY created_at DESC";
+        params = [req.user.organization_id];
+      } else {
+        query = "SELECT * FROM orders WHERE collector_id = $1 ORDER BY created_at DESC";
+        params = [req.user.id];
+      }
     } else {
       query = "SELECT * FROM orders WHERE buyer_id = $1 ORDER BY created_at DESC";
       params = [req.user.id];
     }
+
     const { rows } = await pool.query(query, params);
     res.json(rows);
   } catch (err) {
@@ -616,31 +681,25 @@ app.get("/orders", auth, async (req, res) => {
 
 app.get("/orders/:id/items", auth, async (req, res) => {
   try {
-    // Verify ownership or admin/collector role
-    const { rows: orderRows } = await pool.query(
-      "SELECT buyer_id, collector_id FROM orders WHERE id = $1", [req.params.id]
-    );
-    if (orderRows.length === 0) return res.status(404).json({ error: "Order not found" });
-    const { rows: roleRows } = await pool.query(
-      "SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]
-    );
-    const isAdminOrCollector = roleRows.some(r => ["admin", "collector"].includes(r.role));
-    if (orderRows[0].buyer_id !== req.user.id && !isAdminOrCollector) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
+    const { rows: orderRows } = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
+    if (!orderRows.length) return res.status(404).json({ error: "Order not found" });
+    const order = orderRows[0];
+
+    const { rows: roleRows } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]);
+    const isAdmin = roleRows.some((r) => r.role === "admin");
+    const isCollector = roleRows.some((r) => r.role === "collector");
+
+    const canView = isAdmin
+      || (isCollector && (order.collector_id === req.user.id || order.organization_id === req.user.organization_id))
+      || order.buyer_id === req.user.id;
+    if (!canView) return res.status(403).json({ error: "Forbidden" });
 
     const { rows } = await pool.query(
       `SELECT oi.*, s.name as seed_name, s.seed_id as seed_code
-       FROM order_items oi
-       LEFT JOIN seeds s ON s.id = oi.seed_id
-       WHERE oi.order_id = $1`,
-      [req.params.id]
+       FROM order_items oi LEFT JOIN seeds s ON s.id = oi.seed_id
+       WHERE oi.order_id = $1`, [req.params.id]
     );
-    const items = rows.map((r) => ({
-      ...r,
-      seeds: r.seed_name ? { name: r.seed_name, seed_id: r.seed_code } : null,
-    }));
-    res.json(items);
+    res.json(rows.map((r) => ({ ...r, seeds: r.seed_name ? { name: r.seed_name, seed_id: r.seed_code } : null })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -648,22 +707,8 @@ app.get("/orders/:id/items", auth, async (req, res) => {
 
 app.get("/orders/:id/history", auth, async (req, res) => {
   try {
-    // Verify ownership or admin/collector role
-    const { rows: orderRows } = await pool.query(
-      "SELECT buyer_id, collector_id FROM orders WHERE id = $1", [req.params.id]
-    );
-    if (orderRows.length === 0) return res.status(404).json({ error: "Order not found" });
-    const { rows: roleRows } = await pool.query(
-      "SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]
-    );
-    const isAdminOrCollector = roleRows.some(r => ["admin", "collector"].includes(r.role));
-    if (orderRows[0].buyer_id !== req.user.id && !isAdminOrCollector) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-
     const { rows } = await pool.query(
-      "SELECT * FROM order_status_history WHERE order_id = $1 ORDER BY created_at ASC",
-      [req.params.id]
+      "SELECT * FROM order_status_history WHERE order_id = $1 ORDER BY created_at ASC", [req.params.id]
     );
     res.json(rows);
   } catch (err) {
@@ -675,24 +720,40 @@ app.post("/orders", auth, validate(orderSchema), async (req, res) => {
   const { buyer_name, buyer_email, buyer_phone, buyer_address, delivery_method, notes, items } = req.body;
 
   try {
+    // Determine collector_id: first item's seed owner, or the requesting user if they're a collector
+    let collectorId = null;
+    let orgId = null;
+
+    if (items?.length) {
+      const { rows: seedRows } = await pool.query("SELECT added_by, organization_id FROM seeds WHERE id = $1", [items[0].seed_id]);
+      if (seedRows.length) {
+        collectorId = seedRows[0].added_by;
+        orgId = seedRows[0].organization_id;
+      }
+    }
+
+    // If buyer is placing order and we didn't find a collector from seed, leave null
+    const { rows: roleRows } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]);
+    const isCollector = roleRows.some((r) => r.role === "collector");
+    if (isCollector && !collectorId) collectorId = req.user.id;
+    if (isCollector && !orgId) orgId = req.user.organization_id;
+
     const { rows } = await pool.query(
-      `INSERT INTO orders (buyer_id, buyer_name, buyer_email, buyer_phone, buyer_address, delivery_method, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [req.user.id, buyer_name, buyer_email, buyer_phone, buyer_address, delivery_method, notes]
+      `INSERT INTO orders (buyer_id, collector_id, organization_id, buyer_name, buyer_email,
+        buyer_phone, buyer_address, delivery_method, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [req.user.id, collectorId, orgId, buyer_name, buyer_email, buyer_phone, buyer_address, delivery_method, notes]
     );
     const order = rows[0];
 
     if (items?.length) {
-      for (const item of items) {
-        await pool.query(
-          "INSERT INTO order_items (order_id, seed_id, quantity) VALUES ($1, $2, $3)",
-          [order.id, item.seed_id, item.quantity || 1]
-        );
-      }
+      const values = items.map((_, i) => `($1,$${i*2+2},$${i*2+3})`).join(",");
+      const params = [order.id, ...items.flatMap((it) => [it.seed_id, it.quantity || 1])];
+      await pool.query(`INSERT INTO order_items (order_id, seed_id, quantity) VALUES ${values}`, params);
     }
 
     await pool.query(
-      "INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, $2, $3)",
+      "INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1,$2,$3)",
       [order.id, "requested", req.user.id]
     );
 
@@ -704,22 +765,28 @@ app.post("/orders", auth, validate(orderSchema), async (req, res) => {
 
 app.put("/orders/:id/status", auth, validate(statusSchema), async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
-
-  const { status, notes } = req.body;
+  const { status, notes, tracking_code, tracking_url } = req.body;
 
   try {
     const timestampField = { confirmed: "confirmed_at", shipped: "shipped_at", delivered: "delivered_at" }[status];
-    const extra = timestampField ? `, ${timestampField} = now()` : "";
+    const extraSet = timestampField ? `, ${timestampField} = now()` : "";
+    const trackingSet = tracking_code !== undefined ? ", tracking_code = $3, tracking_url = $4" : "";
 
-    const { rows } = await pool.query(
-      `UPDATE orders SET status = $1, updated_at = now()${extra} WHERE id = $2 RETURNING *`,
-      [status, req.params.id]
-    );
-    if (rows.length === 0) return res.status(404).json({ error: "Order not found" });
+    let query, params;
+    if (tracking_code !== undefined) {
+      query = `UPDATE orders SET status=$1, updated_at=now()${extraSet}${trackingSet} WHERE id=$2 RETURNING *`;
+      params = [status, req.params.id, tracking_code || null, tracking_url || null];
+    } else {
+      query = `UPDATE orders SET status=$1, updated_at=now()${extraSet} WHERE id=$2 RETURNING *`;
+      params = [status, req.params.id];
+    }
+
+    const { rows } = await pool.query(query, params);
+    if (!rows.length) return res.status(404).json({ error: "Order not found" });
 
     await pool.query(
-      "INSERT INTO order_status_history (order_id, status, changed_by, notes) VALUES ($1, $2, $3, $4)",
-      [req.params.id, status, req.user.id, notes]
+      "INSERT INTO order_status_history (order_id, status, changed_by, notes, tracking_code) VALUES ($1,$2,$3,$4,$5)",
+      [req.params.id, status, req.user.id, notes || null, tracking_code || null]
     );
 
     res.json(rows[0]);
@@ -730,10 +797,9 @@ app.put("/orders/:id/status", auth, validate(statusSchema), async (req, res) => 
 
 app.delete("/orders/:id", auth, async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
-
   try {
     const { rowCount } = await pool.query("DELETE FROM orders WHERE id = $1", [req.params.id]);
-    if (rowCount === 0) return res.status(404).json({ error: "Order not found" });
+    if (!rowCount) return res.status(404).json({ error: "Order not found" });
     res.json({ message: "Order deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -746,7 +812,6 @@ app.delete("/orders/:id", auth, async (req, res) => {
 
 app.get("/seeds/:id/history", auth, async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
-
   try {
     let query, params;
     if (req.params.id === "all") {
@@ -770,7 +835,15 @@ app.get("/seeds/:id/history", auth, async (req, res) => {
 app.get("/bin", auth, async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
   try {
-    const { rows } = await pool.query("SELECT * FROM deleted_seeds WHERE deleted_by = $1 OR added_by = $1 ORDER BY deleted_at DESC", [req.user.id]);
+    let query, params;
+    if (req.user.organization_id) {
+      query = "SELECT * FROM deleted_seeds WHERE organization_id = $1 ORDER BY deleted_at DESC";
+      params = [req.user.organization_id];
+    } else {
+      query = "SELECT * FROM deleted_seeds WHERE (deleted_by = $1 OR added_by = $1) AND organization_id IS NULL ORDER BY deleted_at DESC";
+      params = [req.user.id];
+    }
+    const { rows } = await pool.query(query, params);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -779,70 +852,72 @@ app.get("/bin", auth, async (req, res) => {
 
 app.post("/bin/:id/restore", auth, async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
-
   try {
     const { rows } = await pool.query("SELECT * FROM deleted_seeds WHERE id = $1", [req.params.id]);
-    if (rows.length === 0) return res.status(404).json({ error: "Not found in bin" });
-
+    if (!rows.length) return res.status(404).json({ error: "Not found in bin" });
     const d = rows[0];
+
+    await pool.query("BEGIN");
     await pool.query(
-      `INSERT INTO seeds (id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-      [d.original_id, d.seed_id, d.name, d.quantity, d.notes, d.image_url, d.latitude, d.longitude, d.street, d.city, d.country, d.zip_code, d.added_by, d.original_created_at]
+      `INSERT INTO seeds (id, seed_id, name, quantity, notes, image_url, latitude, longitude,
+        street, city, country, zip_code, added_by, organization_id, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       ON CONFLICT (id) DO NOTHING`,
+      [d.original_id, d.seed_id, d.name, d.quantity, d.notes, d.image_url,
+        d.latitude, d.longitude, d.street, d.city, d.country, d.zip_code,
+        d.added_by, d.organization_id, d.original_created_at]
     );
-
     await pool.query("DELETE FROM deleted_seeds WHERE id = $1", [req.params.id]);
-
     await pool.query(
-      "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1, $2, $3, $4)",
+      "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1,$2,$3,$4)",
       [d.original_id, "restored", JSON.stringify(d), req.user.id]
     );
-
+    await pool.query("COMMIT");
     res.json({ message: "Seed restored" });
   } catch (err) {
+    await pool.query("ROLLBACK");
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post("/bin/batch-restore", auth, async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
-
   const { ids } = req.body;
-  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids required" });
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "ids required" });
 
   try {
-    for (const id of ids) {
-      const { rows } = await pool.query("SELECT * FROM deleted_seeds WHERE id = $1", [id]);
-      if (rows.length === 0) continue;
+    await pool.query("BEGIN");
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
+    const { rows } = await pool.query(`SELECT * FROM deleted_seeds WHERE id IN (${placeholders})`, ids);
 
-      const d = rows[0];
+    for (const d of rows) {
       await pool.query(
-        `INSERT INTO seeds (id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        `INSERT INTO seeds (id, seed_id, name, quantity, notes, image_url, latitude, longitude,
+          street, city, country, zip_code, added_by, organization_id, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
          ON CONFLICT (id) DO NOTHING`,
-        [d.original_id, d.seed_id, d.name, d.quantity, d.notes, d.image_url, d.latitude, d.longitude, d.street, d.city, d.country, d.zip_code, d.added_by, d.original_created_at]
+        [d.original_id, d.seed_id, d.name, d.quantity, d.notes, d.image_url,
+          d.latitude, d.longitude, d.street, d.city, d.country, d.zip_code,
+          d.added_by, d.organization_id, d.original_created_at]
       );
-
-      await pool.query("DELETE FROM deleted_seeds WHERE id = $1", [id]);
-
       await pool.query(
-        "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1, $2, $3, $4)",
+        "INSERT INTO seed_history (seed_id, action, changes, performed_by) VALUES ($1,$2,$3,$4)",
         [d.original_id, "restored", JSON.stringify(d), req.user.id]
       );
     }
-
-    res.json({ message: `${ids.length} seed(s) restored` });
+    await pool.query(`DELETE FROM deleted_seeds WHERE id IN (${placeholders})`, ids);
+    await pool.query("COMMIT");
+    res.json({ message: `${rows.length} seed(s) restored` });
   } catch (err) {
+    await pool.query("ROLLBACK");
     res.status(500).json({ error: err.message });
   }
 });
 
 app.post("/bin/batch-delete", auth, async (req, res) => {
   if (!(await requireRole(req, res, ["admin", "collector"]))) return;
-
   const { ids } = req.body;
-  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "ids required" });
-
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "ids required" });
   try {
     const placeholders = ids.map((_, i) => `$${i + 1}`).join(",");
     await pool.query(`DELETE FROM deleted_seeds WHERE id IN (${placeholders})`, ids);
@@ -853,7 +928,7 @@ app.post("/bin/batch-delete", auth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════
-// BUYER SEEDS
+// BUYER SEEDS (persisted favorites in DB)
 // ══════════════════════════════════════════════════════════
 
 app.get("/buyer-seeds", auth, async (req, res) => {
@@ -861,37 +936,23 @@ app.get("/buyer-seeds", auth, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT bs.id, bs.seed_id, bs.quantity, bs.assigned_at,
               s.id as s_id, s.seed_id as s_seed_id, s.name, s.image_url, s.country, s.city,
-              s.street, s.zip_code, s.notes, s.latitude, s.longitude, s.created_at as s_created_at, s.quantity as s_quantity
+              s.street, s.zip_code, s.notes, s.latitude, s.longitude,
+              s.created_at as s_created_at, s.quantity as s_quantity
        FROM buyer_seeds bs
        LEFT JOIN seeds s ON s.id = bs.seed_id
        WHERE bs.buyer_id = $1
        ORDER BY bs.assigned_at DESC`,
       [req.user.id]
     );
-
-    // Reshape to match frontend expectation
     const result = rows.map((r) => ({
-      id: r.id,
-      seed_id: r.seed_id,
-      quantity: r.quantity,
-      assigned_at: r.assigned_at,
+      id: r.id, seed_id: r.seed_id, quantity: r.quantity, assigned_at: r.assigned_at,
       seeds: r.s_id ? {
-        id: r.s_id,
-        seed_id: r.s_seed_id,
-        name: r.name,
-        image_url: r.image_url,
-        country: r.country,
-        city: r.city,
-        street: r.street,
-        zip_code: r.zip_code,
-        notes: r.notes,
-        latitude: r.latitude,
-        longitude: r.longitude,
-        created_at: r.s_created_at,
-        quantity: r.s_quantity,
+        id: r.s_id, seed_id: r.s_seed_id, name: r.name, image_url: r.image_url,
+        country: r.country, city: r.city, street: r.street, zip_code: r.zip_code,
+        notes: r.notes, latitude: r.latitude, longitude: r.longitude,
+        created_at: r.s_created_at, quantity: r.s_quantity,
       } : null,
     }));
-
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -901,25 +962,29 @@ app.get("/buyer-seeds", auth, async (req, res) => {
 app.post("/buyer-seeds", auth, async (req, res) => {
   const { seed_id, quantity, notes } = req.body;
   if (!seed_id) return res.status(400).json({ error: "seed_id required" });
-
   try {
     const { rows } = await pool.query(
-      "INSERT INTO buyer_seeds (buyer_id, seed_id, quantity, notes) VALUES ($1, $2, $3, $4) RETURNING *",
+      "INSERT INTO buyer_seeds (buyer_id, seed_id, quantity, notes) VALUES ($1,$2,$3,$4) ON CONFLICT (buyer_id, seed_id) DO UPDATE SET quantity = EXCLUDED.quantity RETURNING *",
       [req.user.id, seed_id, quantity || 1, notes]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
-    if (err.code === "23505") return res.status(409).json({ error: "Already assigned" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/buyer-seeds/:id", auth, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM buyer_seeds WHERE id = $1 AND buyer_id = $2", [req.params.id, req.user.id]);
+    res.json({ message: "Removed from saved seeds" });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 app.get("/buyer-seeds/assigned-uuids", auth, async (req, res) => {
   try {
-    const { rows } = await pool.query(
-      "SELECT seed_id FROM buyer_seeds WHERE buyer_id = $1",
-      [req.user.id]
-    );
+    const { rows } = await pool.query("SELECT seed_id FROM buyer_seeds WHERE buyer_id = $1", [req.user.id]);
     res.json(rows.map((r) => r.seed_id));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -932,32 +997,23 @@ app.get("/buyer-seeds/assigned-uuids", auth, async (req, res) => {
 
 app.post("/upload/seed-image", auth, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-
   try {
     if (r2Client && process.env.R2_BUCKET) {
       const ext = path.extname(req.file.originalname);
       const key = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
-      
       await r2Client.send(new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET,
-        Key: key,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype,
+        Bucket: process.env.R2_BUCKET, Key: key,
+        Body: req.file.buffer, ContentType: req.file.mimetype,
       }));
-
       const publicBase = process.env.R2_PUBLIC_URL || `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET}`;
-      const url = `${publicBase}/${key}`;
-      res.json({ url });
+      res.json({ url: `${publicBase}/${key}` });
     } else {
-      // Fallback: save to disk
       const ext = path.extname(req.file.originalname);
       const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
       fs.writeFileSync(path.join(UPLOAD_DIR, filename), req.file.buffer);
-      const url = `https://${req.get("host")}/uploads/${filename}`;
-      res.json({ url });
+      res.json({ url: `https://${req.get("host")}/uploads/${filename}` });
     }
   } catch (err) {
-    console.error("Upload error:", err);
     res.status(500).json({ error: "Upload failed: " + err.message });
   }
 });
@@ -966,13 +1022,9 @@ app.post("/upload/seed-image", auth, upload.single("file"), async (req, res) => 
 
 app.use((err, _req, res, _next) => {
   console.error("Unhandled error:", err);
-  if (err instanceof multer.MulterError) {
-    return res.status(400).json({ error: err.message });
-  }
+  if (err.message === "Not allowed by CORS") return res.status(403).json({ error: "CORS error" });
   res.status(500).json({ error: "Internal server error" });
 });
 
-// ── Start ────────────────────────────────────────────────
-
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`API running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Indomitum API running on port ${PORT}`));

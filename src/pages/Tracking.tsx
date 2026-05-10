@@ -99,7 +99,8 @@ const Tracking = () => {
   const [newOrderOpen, setNewOrderOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
-  const [showComingSoon, setShowComingSoon] = useState(true);
+  const [trackingCode, setTrackingCode] = useState("");
+  const [trackingUrl, setTrackingUrl] = useState("");
 
   // New order form state
   const [newOrder, setNewOrder] = useState({
@@ -236,21 +237,7 @@ const Tracking = () => {
   return (
     <div className="min-h-screen bg-background pb-safe">
       {/* Coming Soon Banner */}
-      {showComingSoon && (
-        <div className="bg-primary/10 border-b border-primary/20 px-4 py-3">
-          <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-primary" />
-              <p className="text-sm font-medium text-foreground">
-                🚀 <span className="font-semibold">Coming Soon!</span> Order tracking is under active development. Stay tuned for updates.
-              </p>
-            </div>
-            <button onClick={() => setShowComingSoon(false)} className="text-muted-foreground hover:text-foreground text-sm ml-4 shrink-0">
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
+
 
       {/* Header */}
       <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border px-4 lg:px-6 py-4">

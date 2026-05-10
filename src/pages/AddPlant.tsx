@@ -384,7 +384,7 @@ const AddPlant = () => {
 
             <div className="space-y-6">
               {/* Scanner always visible, auto-starts */}
-              <WebScanner onScan={handleWebScan} autoStart />
+              {!formData.id && <WebScanner onScan={handleWebScan} autoStart />}
 
               {/* Show scanned result */}
               {formData.id && (

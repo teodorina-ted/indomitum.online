@@ -22,7 +22,7 @@ interface AuthContextType {
   profile: Profile | null;
   roles: AppRole[];
   isLoading: boolean;
-  signUp: (email: string, password: string, fullName: string, role: AppRole) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string, role: AppRole, organizationName?: string, organizationId?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isCollector: boolean;
@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     init();
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, fullName: string, role: AppRole) => {
+  const signUp = useCallback(async (email: string, password: string, fullName: string, role: AppRole, organizationName?: string, organizationId?: string) => {
     try {
       // Clear any existing session first
       clearToken();
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setProfile(null);
       setRoles([]);
 
-      const { data, error } = await api.signup(email, password, fullName, role);
+      const { data, error } = await api.signup(email, password, fullName, role, organizationName, organizationId);
       if (error || !data) throw new Error(error || "Signup failed");
 
       setToken(data.token);

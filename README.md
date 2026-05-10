@@ -1,73 +1,75 @@
-# Welcome to your Lovable project
+# Indomitum — Seed Collection CRM
 
-## Project info
+A platform for professional seed collectors to document, track, and share plant specimens with buyers.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Stack
 
-## How can I edit this code?
+- **Frontend**: React 18 + Vite + TypeScript + Tailwind CSS + shadcn/ui
+- **Backend**: Node.js + Express + PostgreSQL + JWT auth
+- **Storage**: Cloudflare R2 (or local disk fallback)
+- **Infra**: Docker + Railway + Nginx
 
-There are several ways of editing your application.
+## Quick Start (Local)
 
-**Use Lovable**
+```bash
+# 1. Clone
+git clone https://github.com/teodorina-ted/indomitum.online.git
+cd indomitum.online-main
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+# 2. Install frontend deps
+npm install
 
-Changes made via Lovable will be committed automatically to this repo.
+# 3. Copy and fill env
+cp .env.example .env
+# Edit .env with your DATABASE_URL, JWT_SECRET, etc.
 
-**Use your preferred IDE**
+# 4. Start local DB (or connect to Railway/Supabase Postgres)
+# Run db/init.sql to create tables from scratch, OR
+# Run db/migrate_v2.sql if upgrading an existing database
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+# 5. Start API
+cd api && npm install && node index.js
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# 6. Start frontend (in another terminal, from root)
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | ✅ | PostgreSQL connection string |
+| `JWT_SECRET` | ✅ | Generate: `openssl rand -hex 64` |
+| `CORS_ORIGIN` | ✅ | Comma-separated allowed origins e.g. `https://indomitum.online` |
+| `VITE_API_URL` | ✅ | Backend URL e.g. `/api` or `https://api.indomitum.online` |
+| `R2_ACCESS_KEY_ID` | ⬜ | Cloudflare R2 key (falls back to local disk) |
+| `R2_SECRET_ACCESS_KEY` | ⬜ | Cloudflare R2 secret |
+| `R2_ENDPOINT` | ⬜ | R2 endpoint URL |
+| `R2_BUCKET` | ⬜ | R2 bucket name |
+| `R2_PUBLIC_URL` | ⬜ | Public base URL for R2 assets |
 
-**Use GitHub Codespaces**
+## Roles
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- **Collector** — add seeds, manage collection, handle orders, ship
+- **Buyer** — scan QR codes, view passports, place orders, track shipments  
+- **Admin** — full access to everything
 
-## What technologies are used for this project?
+## Organization / Team Setup
 
-This project is built with:
+When a collector signs up they can:
+1. **Create a new organization** (enter a company name)
+2. **Join an existing organization** (enter the org UUID from Settings)
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Multiple collectors in the same org share visibility of all seeds.
 
-## How can I deploy this project?
+## Deploy to Railway
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+1. Push to GitHub
+2. Connect repo in Railway
+3. Set all environment variables above
+4. Railway auto-builds from `Dockerfile`
 
-## Can I connect a custom domain to my Lovable project?
+## Database
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- Fresh install: run `db/init.sql`
+- Upgrading from v1: run `db/migrate_v2.sql`
