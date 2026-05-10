@@ -10,6 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const { z } = require("zod");
 const promClient = require("prom-client");
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 
 const app = express();
 
@@ -47,6 +48,16 @@ const authLimiter = rateLimit({
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const JWT_SECRET = process.env.JWT_SECRET;
+
+// R2 Storage client
+const r2Client = process.env.R2_ACCESS_KEY_ID ? new S3Client({
+  region: "auto",
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
+}) : null;
 if (!JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is required. Generate one with: openssl rand -hex 64');
   process.exit(1);
@@ -901,11 +912,35 @@ app.get("/buyer-seeds/assigned-uuids", auth, async (req, res) => {
 // FILE UPLOAD
 // ══════════════════════════════════════════════════════════
 
-app.post("/upload/seed-image", auth, upload.single("file"), (req, res) => {
+app.post("/upload/seed-image", auth, upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  const baseUrl = process.env.PUBLIC_URL || `https://${req.get("host")}`;
-  const url = `${baseUrl}/uploads/${req.file.filename}`;
-  res.json({ url });
+
+  try {
+    if (r2Client && process.env.R2_BUCKET) {
+      // Upload to Cloudflare R2
+      const key = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(req.file.originalname)}`;
+      await r2Client.send(new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET,
+        Key: key,
+        Body: req.file.buffer || fs.readFileSync(req.file.path),
+        ContentType: req.file.mimetype,
+      }));
+      
+      // Clean up local temp file if exists
+      if (req.file.path) fs.unlink(req.file.path, () => {});
+      
+      const url = `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET}/${key}`;
+      res.json({ url });
+    } else {
+      // Fallback to local storage
+      const baseUrl = `https://${req.get("host")}`;
+      const url = `${baseUrl}/uploads/${req.file.filename}`;
+      res.json({ url });
+    }
+  } catch (err) {
+    console.error("Upload error:", err);
+    res.status(500).json({ error: "Upload failed" });
+  }
 });
 
 // ── Global Error Handler ────────────────────────────────
