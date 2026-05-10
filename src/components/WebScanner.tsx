@@ -7,14 +7,22 @@ import { toast } from "sonner";
 interface WebScannerProps {
   onScan: (result: string) => void;
   className?: string;
+  autoStart?: boolean;
 }
 
-const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
+const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerProps) => {
   const [isScanning, setIsScanning] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const containerIdRef = useRef(`scanner-${Math.random().toString(36).substr(2, 9)}`);
+
+  // Auto-start on mount
+  useEffect(() => {
+    if (autoStart) {
+      startScanner();
+    }
+  }, []);
 
   const stopScanner = useCallback(async () => {
     if (scannerRef.current) {

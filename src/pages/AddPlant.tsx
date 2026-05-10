@@ -106,11 +106,9 @@ const AddPlant = () => {
   const handleWebScan = async (result: string) => {
     const isValid = await validateDuplicateId(result);
     if (isValid) {
-      setFormData({ ...formData, id: result });
-      setShowWebScanner(false);
+      setFormData(prev => ({ ...prev, id: result }));
       toast.success("Code scanned!");
-    } else {
-      setShowWebScanner(false);
+      setTimeout(() => setCurrentStep(2), 500);
     }
   };
 
@@ -381,65 +379,49 @@ const AddPlant = () => {
         {currentStep === 1 && (
           <div className="animate-fade-in">
             <h2 className="text-2xl font-bold text-foreground mb-2">Scan Bag ID</h2>
-            <p className="text-muted-foreground mb-8">
-              Scan the QR code on the seed bag or enter the ID manually.
+            <p className="text-muted-foreground mb-6">
+              Point your camera at a QR code or barcode, or enter the ID manually.
             </p>
 
             <div className="space-y-6">
-              {showWebScanner ? (
-                <div className="space-y-4">
-                  <WebScanner onScan={handleWebScan} />
+              {/* Scanner always visible, auto-starts */}
+              <WebScanner onScan={handleWebScan} autoStart />
+
+              {/* Show scanned result */}
+              {formData.id && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                  <Check className="w-4 h-4 text-primary shrink-0" />
+                  <span className="text-sm font-medium text-primary">Scanned: {formData.id}</span>
                   <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setShowWebScanner(false)}
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto h-6 px-2"
+                    onClick={() => setFormData({ ...formData, id: "" })}
                   >
-                    Cancel Scanning
+                    <X className="w-3 h-3" />
                   </Button>
                 </div>
-              ) : (
-                <>
-                  <div className="aspect-square max-w-xs mx-auto rounded-2xl border-2 border-dashed border-border bg-muted/30 flex flex-col items-center justify-center p-8">
-                    <ScanLine className="w-16 h-16 text-primary mb-4" />
-                    <Button onClick={handleScanQR} size="lg" disabled={isScanning}>
-                      {isScanning ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Scanning...
-                        </>
-                      ) : (
-                        <>
-                          <Camera className="w-4 h-4 mr-2" />
-                          Scan Barcode
-                        </>
-                      )}
-                    </Button>
-                    <span className="text-xs text-muted-foreground mt-2">
-                      Supports QR, Code128, EAN-13 & more
-                    </span>
-                  </div>
-
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-border" />
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="bg-background px-4 text-sm text-muted-foreground">or enter manually</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">
-                      Bag ID
-                    </label>
-                    <Input
-                      placeholder="e.g., SEED-ABC123"
-                      value={formData.id}
-                      onChange={(e) => setFormData({ ...formData, id: e.target.value })}
-                    />
-                  </div>
-                </>
               )}
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-background px-4 text-sm text-muted-foreground">or enter manually</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Bag ID
+                </label>
+                <Input
+                  placeholder="e.g., SEED-ABC123"
+                  value={formData.id}
+                  onChange={(e) => setFormData({ ...formData, id: e.target.value })}
+                />
+              </div>
             </div>
           </div>
         )}
