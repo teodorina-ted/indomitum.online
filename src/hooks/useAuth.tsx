@@ -65,6 +65,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUp = useCallback(async (email: string, password: string, fullName: string, role: AppRole) => {
     try {
+      // Clear any existing session first
+      clearToken();
+      setUser(null);
+      setProfile(null);
+      setRoles([]);
+
       const { data, error } = await api.signup(email, password, fullName, role);
       if (error || !data) throw new Error(error || "Signup failed");
 

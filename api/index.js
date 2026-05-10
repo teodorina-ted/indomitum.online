@@ -781,7 +781,8 @@ app.post("/bin/batch-restore", auth, async (req, res) => {
       const d = rows[0];
       await pool.query(
         `INSERT INTO seeds (id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         ON CONFLICT (id) DO NOTHING`,
         [d.original_id, d.seed_id, d.name, d.quantity, d.notes, d.image_url, d.latitude, d.longitude, d.street, d.city, d.country, d.zip_code, d.added_by, d.original_created_at]
       );
 

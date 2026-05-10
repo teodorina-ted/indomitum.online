@@ -281,15 +281,15 @@ const Dashboard = () => {
     );
     if (!confirmed) return;
 
-    const seedsToDelete = seeds.filter((s) => selectedSeeds.includes(s.id));
+    const { error } = await api.deleteSeeds(selectedSeeds);
 
-    for (const seed of seedsToDelete) {
-      await api.deleteSeed(seed.id);
+    if (error) {
+      toast.error("Failed to delete seeds. Please try again.");
+    } else {
+      toast.success(`${selectedSeeds.length} seed(s) moved to bin`, { duration: 2000 });
+      setSeeds(prev => prev.filter((s) => !selectedSeeds.includes(s.id)));
+      setSelectedSeeds([]);
     }
-
-    toast.success(`${selectedSeeds.length} seed(s) moved to bin`, { duration: 2000 });
-    setSeeds(seeds.filter((s) => !selectedSeeds.includes(s.id)));
-    setSelectedSeeds([]);
   };
 
   const handleSignOut = async () => {
