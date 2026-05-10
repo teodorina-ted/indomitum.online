@@ -69,13 +69,7 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || "./uploads";
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: UPLOAD_DIR,
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname);
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (_req, file, cb) => {
     const allowed = /jpeg|jpg|png|gif|webp/;
@@ -514,8 +508,9 @@ app.delete("/seeds/:id", auth, async (req, res) => {
 
     const seed = seedRows[0];
     
-    // Remove buyer_seeds references first to avoid FK constraint errors
+    // Remove references first to avoid FK constraint errors
     await pool.query("DELETE FROM buyer_seeds WHERE seed_id = $1", [req.params.id]);
+    await pool.query("DELETE FROM order_items WHERE seed_id = $1", [req.params.id]);
 
     await pool.query(
       `INSERT INTO deleted_seeds (original_id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, original_created_at, deleted_by, expires_at)
@@ -549,8 +544,9 @@ app.post("/seeds/batch-delete", auth, async (req, res) => {
 
       const seed = rows[0];
       
-      // Remove buyer_seeds references first
+      // Remove references first to avoid FK constraint errors
       await pool.query("DELETE FROM buyer_seeds WHERE seed_id = $1", [id]);
+      await pool.query("DELETE FROM order_items WHERE seed_id = $1", [id]);
 
       await pool.query(
         `INSERT INTO deleted_seeds (original_id, seed_id, name, quantity, notes, image_url, latitude, longitude, street, city, country, zip_code, added_by, original_created_at, deleted_by, expires_at)
@@ -917,29 +913,30 @@ app.post("/upload/seed-image", auth, upload.single("file"), async (req, res) => 
 
   try {
     if (r2Client && process.env.R2_BUCKET) {
-      // Upload to Cloudflare R2
-      const key = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}${path.extname(req.file.originalname)}`;
+      const ext = path.extname(req.file.originalname);
+      const key = `uploads/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+      
       await r2Client.send(new PutObjectCommand({
         Bucket: process.env.R2_BUCKET,
         Key: key,
-        Body: req.file.buffer || fs.readFileSync(req.file.path),
+        Body: req.file.buffer,
         ContentType: req.file.mimetype,
       }));
-      
-      // Clean up local temp file if exists
-      if (req.file.path) fs.unlink(req.file.path, () => {});
-      
-      const url = `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET}/${key}`;
+
+      const publicBase = process.env.R2_PUBLIC_URL || `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET}`;
+      const url = `${publicBase}/${key}`;
       res.json({ url });
     } else {
-      // Fallback to local storage
-      const baseUrl = `https://${req.get("host")}`;
-      const url = `${baseUrl}/uploads/${req.file.filename}`;
+      // Fallback: save to disk
+      const ext = path.extname(req.file.originalname);
+      const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+      fs.writeFileSync(path.join(UPLOAD_DIR, filename), req.file.buffer);
+      const url = `https://${req.get("host")}/uploads/${filename}`;
       res.json({ url });
     }
   } catch (err) {
     console.error("Upload error:", err);
-    res.status(500).json({ error: "Upload failed" });
+    res.status(500).json({ error: "Upload failed: " + err.message });
   }
 });
 
