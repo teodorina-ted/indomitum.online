@@ -62,10 +62,9 @@ const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerPro
           aspectRatio: 1,
         },
         (decodedText) => {
-          // On successful scan
-          toast.success("Code scanned!");
-          onScan(decodedText);
+          // On successful scan - stop first, then notify parent
           stopScanner();
+          onScan(decodedText);
         },
         () => {
           // QR code not detected - called frequently, no action needed

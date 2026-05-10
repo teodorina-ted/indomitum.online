@@ -107,8 +107,7 @@ const AddPlant = () => {
     const isValid = await validateDuplicateId(result);
     if (isValid) {
       setFormData(prev => ({ ...prev, id: result }));
-      toast.success("Code scanned!");
-      setTimeout(() => setCurrentStep(2), 500);
+      toast.success("Code scanned! Tap Continue to proceed.", { duration: 2000 });
     }
   };
 

@@ -16,6 +16,7 @@ const app = express();
 // ══════════════════════════════════════════════════════════
 // SECURITY MIDDLEWARE
 // ══════════════════════════════════════════════════════════
+
 app.set("trust proxy", 1);
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
@@ -893,7 +894,8 @@ app.get("/buyer-seeds/assigned-uuids", auth, async (req, res) => {
 
 app.post("/upload/seed-image", auth, upload.single("file"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-  const url = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+  const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
+  const url = `${baseUrl}/uploads/${req.file.filename}`;
   res.json({ url });
 });
 
