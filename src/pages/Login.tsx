@@ -92,7 +92,12 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!formData.email || !formData.password) {
+      toast.error("Please enter your email and password.");
+      return;
+    }
+
     if (viewMode === "signup" && formData.password !== formData.confirmPassword) {
       toast.error("Passwords don't match");
       return;
@@ -103,34 +108,56 @@ const Login = () => {
       return;
     }
 
+    if (viewMode === "signup" && !formData.name?.trim()) {
+      toast.error("Please enter your full name");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       if (viewMode === "signup") {
         const { error } = await signUp(
-          formData.email,
+          formData.email.trim(),
           formData.password,
-          formData.name,
-          role
+          formData.name.trim(),
+          role,
+          organizationName || undefined,
+          organizationId || undefined,
         );
-        
+
         if (error) {
-          toast.error(error.message);
+          const msg = error.message || "Signup failed";
+          if (msg.toLowerCase().includes("already")) {
+            toast.error("An account with this email already exists. Please sign in instead.");
+          } else {
+            toast.error(msg);
+          }
         } else {
           toast.success("Account created! Welcome to Indomitum.");
           localStorage.setItem("indomitum_new_user", "true");
           navigate(role === "collector" ? "/dashboard" : "/buyer");
         }
       } else {
-        const { error } = await signIn(formData.email, formData.password);
-        
+        const { error } = await signIn(formData.email.trim(), formData.password);
+
         if (error) {
-          toast.error(error.message);
+          const msg = error.message || "";
+          if (msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("password") || msg.toLowerCase().includes("not found")) {
+            toast.error("No account found with these credentials. Check your email and password, or sign up.");
+          } else if (msg.toLowerCase().includes("network") || msg.toLowerCase().includes("fetch")) {
+            toast.error("Could not reach the server. Please check your connection and try again.");
+          } else {
+            toast.error(msg || "Login failed. Please try again.");
+          }
         } else {
           toast.success("Welcome back!");
           // Navigation handled by useEffect watching isCollector
         }
       }
+    } catch (err: any) {
+      toast.error("Something went wrong. Please try again.");
+      console.error("Auth error:", err);
     } finally {
       setIsSubmitting(false);
     }
