@@ -20,6 +20,8 @@ const Login = () => {
   const resetToken = searchParams.get("type") === "recovery";
   
   const [role, setRole] = useState<UserRole>(initialRole);
+  const [organizationName, setOrganizationName] = useState("");
+  const [organizationId, setOrganizationId] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>(resetToken ? "reset" : "login");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -156,7 +158,14 @@ const Login = () => {
         }
       }
     } catch (err: any) {
-      toast.error("Something went wrong. Please try again.");
+      const msg = err?.message || "";
+      if (msg.includes("405") || msg.includes("fetch") || msg.includes("network") || msg.includes("Failed to fetch")) {
+        toast.error("Cannot reach server. Please try again in a moment.");
+      } else if (msg.toLowerCase().includes("already")) {
+        toast.error("An account with this email already exists. Please sign in instead.");
+      } else {
+        toast.error(msg || "Something went wrong. Please try again.");
+      }
       console.error("Auth error:", err);
     } finally {
       setIsSubmitting(false);
