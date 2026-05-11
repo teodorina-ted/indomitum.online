@@ -33,16 +33,7 @@ const Login = () => {
     name: ""
   });
 
-  // Redirect if already logged in - route based on role
-  useEffect(() => {
-    if (user && !authLoading) {
-      if (isCollector) {
-        navigate("/dashboard");
-      } else {
-        navigate("/buyer");
-      }
-    }
-  }, [user, authLoading, isCollector, navigate]);
+  // Only redirect after successful login (handled in handleSubmit)
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -175,6 +166,13 @@ const Login = () => {
           }
         } else {
           toast.success("Welcome back!");
+          const { data: meData } = await (await import("@/lib/api")).api.me();
+          const roles = meData?.roles || [];
+          if (roles.includes("collector") || roles.includes("admin")) {
+            navigate("/dashboard");
+          } else {
+            navigate("/buyer");
+          }
         }
       }
     } catch (err: any) {
