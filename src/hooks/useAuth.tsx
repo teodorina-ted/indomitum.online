@@ -88,16 +88,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signIn = useCallback(async (email: string, password: string) => {
     try {
       const { data, error } = await api.login(email, password);
-      if (error || !data) throw new Error(error || "Login failed");
+      if (error || !data) {
+        // Pass through structured error
+        const err = new Error(error || "Login failed");
+        return { error: err, code: null, email: null };
+      }
 
       setToken(data.token);
       setUser(data.user);
       setProfile(data.profile || null);
       setRoles((data.roles as AppRole[]) || []);
 
-      return { error: null };
+      return { error: null, code: null, email: null };
     } catch (err) {
-      return { error: err as Error };
+      return { error: err as Error, code: null, email: null };
     }
   }, []);
 

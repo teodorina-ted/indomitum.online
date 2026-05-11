@@ -141,11 +141,32 @@ const Login = () => {
           navigate(role === "collector" ? "/dashboard" : "/buyer");
         }
       } else {
-        const { error } = await signIn(formData.email.trim(), formData.password);
+        const { error, code, email: errorEmail } = await signIn(formData.email.trim(), formData.password) as any;
 
         if (error) {
           const msg = error.message || "";
-          if (msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("password") || msg.toLowerCase().includes("not found")) {
+          if (msg.includes("EMAIL_NOT_VERIFIED") || msg.toLowerCase().includes("verify your email")) {
+            toast.error("Please verify your email before logging in. Check your inbox or request a new link.", { duration: 6000 });
+            // Offer resend
+            const resendEmail = errorEmail || formData.email.trim();
+            if (resendEmail) {
+              setTimeout(() => {
+                toast("Didn't get the email?", {
+                  action: {
+                    label: "Resend",
+                    onClick: async () => {
+                      await fetch(`${import.meta.env.VITE_API_URL || ""}/auth/resend-verification`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ email: resendEmail }),
+                      });
+                      toast.success("Verification email resent!");
+                    },
+                  },
+                });
+              }, 1000);
+            }
+          } else if (msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("password") || msg.toLowerCase().includes("not found")) {
             toast.error("No account found with these credentials. Check your email and password, or sign up.");
           } else if (msg.toLowerCase().includes("network") || msg.toLowerCase().includes("fetch")) {
             toast.error("Could not reach the server. Please check your connection and try again.");
@@ -154,7 +175,6 @@ const Login = () => {
           }
         } else {
           toast.success("Welcome back!");
-          // Navigation handled by useEffect watching isCollector
         }
       }
     } catch (err: any) {

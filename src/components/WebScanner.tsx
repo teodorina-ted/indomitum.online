@@ -14,10 +14,43 @@ const isTouchDevice = () =>
   /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
   navigator.maxTouchPoints > 1;
 
+// Extract seed ID from passport URL if needed
+const extractId = (raw: string): string => {
+  if (raw.includes("/passport/")) return decodeURIComponent(raw.split("/passport/").pop() || raw);
+  return raw.trim();
+};
+
 const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDecoding, setIsDecoding] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
+
+  const decodeWithBarcodeDetector = async (blob: Blob): Promise<string | null> => {
+    // Native BarcodeDetector API - fastest, no battery drain, built into Chrome/Android
+    if (!("BarcodeDetector" in window)) return null;
+    try {
+      const detector = new (window as any).BarcodeDetector({
+        formats: ["qr_code", "code_128", "code_39", "ean_13", "ean_8", "data_matrix", "aztec", "pdf417"],
+      });
+      const bitmap = await createImageBitmap(blob);
+      const results = await detector.detect(bitmap);
+      bitmap.close();
+      return results[0]?.rawValue || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const decodeWithHtml5Qrcode = async (file: File): Promise<string | null> => {
+    try {
+      const scanner = new Html5Qrcode("qr-hidden-el");
+      const result = await scanner.scanFile(file, false);
+      await scanner.clear().catch(() => {});
+      return result || null;
+    } catch {
+      return null;
+    }
+  };
 
   const decodeFile = async (file: File) => {
     setIsDecoding(true);
@@ -25,39 +58,21 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
     setPreview(previewUrl);
 
     try {
-      // Try multiple times with different settings for better detection
-      const scanner = new Html5Qrcode("qr-decoder-hidden");
+      // Try native BarcodeDetector first (Chrome/Android - instant)
+      let result = await decodeWithBarcodeDetector(file);
       
-      let result: string | null = null;
-      
-      // First attempt - default
-      try {
-        result = await scanner.scanFile(file, false);
-      } catch {
-        // Second attempt - with verbose for better detection
-        try {
-          result = await scanner.scanFile(file, true);
-        } catch {
-          result = null;
-        }
-      }
-      
-      await scanner.clear().catch(() => {});
+      // Fallback to Html5Qrcode (iOS Safari, Firefox)
+      if (!result) result = await decodeWithHtml5Qrcode(file);
 
       if (result) {
-        // Extract just the seed ID if it's a full URL
-        let finalResult = result;
-        if (result.includes("/passport/")) {
-          finalResult = result.split("/passport/").pop() || result;
-        }
-        onScan(finalResult);
+        onScan(extractId(result));
       } else {
-        toast.error("No QR or barcode detected. Try better lighting or hold steady.");
+        toast.error("No code detected. Try better lighting, hold steady, and make sure the code fills the frame.");
         setPreview(null);
         URL.revokeObjectURL(previewUrl);
       }
     } catch {
-      toast.error("Could not read code. Make sure QR/barcode fills the frame.");
+      toast.error("Failed to read code. Please try again.");
       setPreview(null);
     } finally {
       setIsDecoding(false);
@@ -70,12 +85,12 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
     if (file) decodeFile(file);
   };
 
-  // On desktop - show nothing (manual entry only)
+  // Desktop: return null — manual entry only
   if (!isTouchDevice()) return null;
 
   return (
     <div className={className}>
-      <div id="qr-decoder-hidden" className="hidden" />
+      <div id="qr-hidden-el" className="hidden" />
       <input
         ref={inputRef}
         type="file"
@@ -86,7 +101,7 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
       />
 
       {preview && (
-        <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden border border-border mb-4 relative">
+        <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden border border-border mb-3 relative">
           <img src={preview} alt="Captured" className="w-full object-cover max-h-48" />
           {isDecoding && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-2xl">
@@ -99,7 +114,7 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
       <Button
         onClick={() => inputRef.current?.click()}
         size="lg"
-        className="w-full max-w-xs mx-auto flex"
+        className="w-full"
         disabled={isDecoding}
       >
         <Camera className="w-4 h-4 mr-2" />
@@ -107,7 +122,7 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
       </Button>
 
       <p className="text-xs text-muted-foreground text-center mt-2">
-        Point camera at QR code or barcode on the bag
+        Take a clear photo of the QR code or barcode
       </p>
     </div>
   );

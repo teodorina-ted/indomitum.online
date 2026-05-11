@@ -323,6 +323,16 @@ app.post("/auth/login", authLimiter, validate(loginSchema), async (req, res) => 
     const { rows: roleRows } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [user.id]);
     const { rows: profileRows } = await pool.query("SELECT * FROM profiles WHERE user_id = $1", [user.id]);
 
+    // Check email verification (skip for admin)
+    const isAdmin = roleRows.some(r => r.role === "admin");
+    if (!isAdmin && user.email_verified === false) {
+      return res.status(403).json({ 
+        error: "Please verify your email before logging in. Check your inbox for a verification link.",
+        code: "EMAIL_NOT_VERIFIED",
+        email: user.email
+      });
+    }
+
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
     res.json({ user: { id: user.id, email: user.email }, profile: profileRows[0] || null, roles: roleRows.map((r) => r.role), token });
   } catch (err) {
@@ -369,7 +379,7 @@ app.get("/auth/verify-email", async (req, res) => {
   if (!token) return res.status(400).json({ error: "Token required" });
   try {
     const { rows } = await pool.query(
-      "UPDATE users SET email_verified = true, email_verify_token = null WHERE email_verify_token = $1 AND email_verify_expires > now() RETURNING id, email",
+      "UPDATE users SET email_verified = true, email_verify_token = null, email_verify_expires = null WHERE email_verify_token = $1 AND email_verify_expires > now() RETURNING id, email",
       [token]
     );
     if (!rows.length) return res.status(400).json({ error: "Invalid or expired verification link" });
