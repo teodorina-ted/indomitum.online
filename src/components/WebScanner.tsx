@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
-import { Camera, Upload, Loader2 } from "lucide-react";
+import { Camera, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface WebScannerProps {
@@ -10,9 +10,12 @@ interface WebScannerProps {
   autoStart?: boolean;
 }
 
+const isTouchDevice = () =>
+  /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+  navigator.maxTouchPoints > 1;
+
 const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [isDecoding, setIsDecoding] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
 
@@ -20,21 +23,45 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
     setIsDecoding(true);
     const previewUrl = URL.createObjectURL(file);
     setPreview(previewUrl);
+
     try {
-      const scanner = new Html5Qrcode("qr-file-decoder");
-      const result = await scanner.scanFile(file, false);
+      // Try multiple times with different settings for better detection
+      const scanner = new Html5Qrcode("qr-decoder-hidden");
+      
+      let result: string | null = null;
+      
+      // First attempt - default
+      try {
+        result = await scanner.scanFile(file, false);
+      } catch {
+        // Second attempt - with verbose for better detection
+        try {
+          result = await scanner.scanFile(file, true);
+        } catch {
+          result = null;
+        }
+      }
+      
       await scanner.clear().catch(() => {});
+
       if (result) {
-        onScan(result);
+        // Extract just the seed ID if it's a full URL
+        let finalResult = result;
+        if (result.includes("/passport/")) {
+          finalResult = result.split("/passport/").pop() || result;
+        }
+        onScan(finalResult);
+      } else {
+        toast.error("No QR or barcode detected. Try better lighting or hold steady.");
+        setPreview(null);
+        URL.revokeObjectURL(previewUrl);
       }
     } catch {
-      toast.error("No QR or barcode found. Make sure the code is clear and try again.");
+      toast.error("Could not read code. Make sure QR/barcode fills the frame.");
       setPreview(null);
-      URL.revokeObjectURL(previewUrl);
     } finally {
       setIsDecoding(false);
-      if (cameraInputRef.current) cameraInputRef.current.value = "";
-      if (galleryInputRef.current) galleryInputRef.current.value = "";
+      if (inputRef.current) inputRef.current.value = "";
     }
   };
 
@@ -43,13 +70,20 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
     if (file) decodeFile(file);
   };
 
-  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  // On desktop - show nothing (manual entry only)
+  if (!isTouchDevice()) return null;
 
   return (
     <div className={className}>
-      <div id="qr-file-decoder" className="hidden" />
-      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleChange} />
-      <input ref={galleryInputRef} type="file" accept="image/*" className="hidden" onChange={handleChange} />
+      <div id="qr-decoder-hidden" className="hidden" />
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleChange}
+      />
 
       {preview && (
         <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden border border-border mb-4 relative">
@@ -62,17 +96,19 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
         </div>
       )}
 
-      <div className="flex flex-col gap-3 max-w-xs mx-auto">
-        {isMobile && (
-          <Button onClick={() => cameraInputRef.current?.click()} size="lg" className="w-full" disabled={isDecoding}>
-            <Camera className="w-4 h-4 mr-2" />
-            {isDecoding ? "Reading Code..." : "Scan with Camera"}
-          </Button>
-        )}
-        <Button onClick={() => galleryInputRef.current?.click()} size="lg" variant="outline" className="w-full" disabled={isDecoding}>
-          <Upload className="w-4 h-4 mr-2" /> Upload from Gallery
-        </Button>
-      </div>
+      <Button
+        onClick={() => inputRef.current?.click()}
+        size="lg"
+        className="w-full max-w-xs mx-auto flex"
+        disabled={isDecoding}
+      >
+        <Camera className="w-4 h-4 mr-2" />
+        {isDecoding ? "Reading Code..." : "Scan with Camera"}
+      </Button>
+
+      <p className="text-xs text-muted-foreground text-center mt-2">
+        Point camera at QR code or barcode on the bag
+      </p>
     </div>
   );
 };

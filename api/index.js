@@ -471,9 +471,21 @@ app.post("/auth/update-password", auth, async (req, res) => {
 
 app.delete("/auth/delete-account", auth, async (req, res) => {
   try {
+    await pool.query("BEGIN");
+    // Delete in correct order to avoid FK violations
+    await pool.query("DELETE FROM buyer_seeds WHERE buyer_id = $1", [req.user.id]);
+    await pool.query("DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE buyer_id = $1 OR collector_id = $1)", [req.user.id]);
+    await pool.query("DELETE FROM orders WHERE buyer_id = $1 OR collector_id = $1", [req.user.id]);
+    await pool.query("DELETE FROM seed_history WHERE performed_by = $1", [req.user.id]);
+    await pool.query("DELETE FROM deleted_seeds WHERE added_by = $1 OR deleted_by = $1", [req.user.id]);
+    await pool.query("DELETE FROM seeds WHERE added_by = $1", [req.user.id]);
+    await pool.query("DELETE FROM profiles WHERE user_id = $1", [req.user.id]);
+    await pool.query("DELETE FROM user_roles WHERE user_id = $1", [req.user.id]);
     await pool.query("DELETE FROM users WHERE id = $1", [req.user.id]);
+    await pool.query("COMMIT");
     res.json({ message: "Account deleted" });
   } catch (err) {
+    await pool.query("ROLLBACK");
     res.status(500).json({ error: err.message });
   }
 });
