@@ -43,6 +43,8 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
     if (file) decodeFile(file);
   };
 
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
   return (
     <div className={className}>
       <div id="qr-file-decoder" className="hidden" />
@@ -61,10 +63,12 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
       )}
 
       <div className="flex flex-col gap-3 max-w-xs mx-auto">
-        <Button onClick={() => cameraInputRef.current?.click()} size="lg" className="w-full" disabled={isDecoding}>
-          <Camera className="w-4 h-4 mr-2" />
-          {isDecoding ? "Reading Code..." : "Scan with Camera"}
-        </Button>
+        {isMobile && (
+          <Button onClick={() => cameraInputRef.current?.click()} size="lg" className="w-full" disabled={isDecoding}>
+            <Camera className="w-4 h-4 mr-2" />
+            {isDecoding ? "Reading Code..." : "Scan with Camera"}
+          </Button>
+        )}
         <Button onClick={() => galleryInputRef.current?.click()} size="lg" variant="outline" className="w-full" disabled={isDecoding}>
           <Upload className="w-4 h-4 mr-2" /> Upload from Gallery
         </Button>

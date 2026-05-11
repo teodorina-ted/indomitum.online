@@ -11,6 +11,7 @@ const fs = require("fs");
 const { z } = require("zod");
 const promClient = require("prom-client");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { Resend } = require("resend");
 
 const app = express();
 
@@ -47,6 +48,8 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeade
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const JWT_SECRET = process.env.JWT_SECRET;
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const APP_URL = process.env.APP_URL || "https://indomitum.online";
 if (!JWT_SECRET) {
   console.error("FATAL: JWT_SECRET is required. Generate with: openssl rand -hex 64");
   process.exit(1);
@@ -195,6 +198,42 @@ async function requireRole(req, res, roles) {
   return true;
 }
 
+
+// ── Email Verification Helpers ──────────────────────────────
+
+async function sendVerificationEmail(email, fullName, token) {
+  if (!resend) {
+    console.log("RESEND_API_KEY not set - skipping email verification");
+    return;
+  }
+  const verifyUrl = `${APP_URL}/verify-email?token=${token}`;
+  await resend.emails.send({
+    from: "Indomitum <noreply@indomitum.online>",
+    to: email,
+    subject: "Verify your Indomitum account",
+    html: `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="display:inline-block;background:#2d5016;border-radius:12px;padding:12px">
+            <span style="color:white;font-size:24px">🌱</span>
+          </div>
+          <h1 style="color:#2d5016;margin:12px 0 4px">Indomitum</h1>
+        </div>
+        <h2 style="color:#1a1a1a">Welcome, ${fullName}!</h2>
+        <p style="color:#555;line-height:1.6">Thanks for joining Indomitum. Please verify your email address to activate your account.</p>
+        <div style="text-align:center;margin:32px 0">
+          <a href="${verifyUrl}" style="background:#2d5016;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">
+            Verify Email Address
+          </a>
+        </div>
+        <p style="color:#999;font-size:13px">This link expires in 24 hours. If you did not create an account, you can ignore this email.</p>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
+        <p style="color:#bbb;font-size:12px;text-align:center">Indomitum · Seed Collection Platform</p>
+      </div>
+    `,
+  });
+}
+
 // ── Health & Metrics ────────────────────────────────────
 
 app.get("/health", async (_req, res) => {
@@ -253,8 +292,18 @@ app.post("/auth/signup", authLimiter, validate(signupSchema), async (req, res) =
       [user.id, full_name, email.toLowerCase()]
     );
 
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
-    res.status(201).json({ user: { id: user.id, email: user.email }, profile: profileRows[0], roles: [assignedRole], token });
+    const jwtToken = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
+
+    // Send verification email (non-blocking)
+    const verifyToken = require("crypto").randomBytes(32).toString("hex");
+    pool.query(
+      "UPDATE users SET email_verified = false, email_verify_token = $1, email_verify_expires = now() + interval \'24 hours\' WHERE id = $2",
+      [verifyToken, user.id]
+    ).catch(console.error);
+
+    sendVerificationEmail(email.toLowerCase(), full_name, verifyToken).catch(console.error);
+
+    res.status(201).json({ user: { id: user.id, email: user.email }, profile: profileRows[0], roles: [assignedRole], token: jwtToken });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ error: err.message });
@@ -286,6 +335,44 @@ app.get("/auth/me", auth, async (req, res) => {
     const { rows: profileRows } = await pool.query("SELECT * FROM profiles WHERE user_id = $1", [req.user.id]);
     const { rows: roleRows } = await pool.query("SELECT role FROM user_roles WHERE user_id = $1", [req.user.id]);
     res.json({ user: { id: req.user.id, email: req.user.email }, profile: profileRows[0] || null, roles: roleRows.map((r) => r.role) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+app.get("/auth/verify-email", async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).json({ error: "Token required" });
+  try {
+    const { rows } = await pool.query(
+      "UPDATE users SET email_verified = true, email_verify_token = null WHERE email_verify_token = $1 AND email_verify_expires > now() RETURNING id, email",
+      [token]
+    );
+    if (!rows.length) return res.status(400).json({ error: "Invalid or expired verification link" });
+    res.json({ message: "Email verified successfully! You can now log in." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/auth/resend-verification", authLimiter, async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Email required" });
+  try {
+    const { rows } = await pool.query("SELECT id, email_verified FROM users WHERE email = $1", [email.toLowerCase()]);
+    if (!rows.length) return res.json({ message: "If that email exists, a verification link has been sent." });
+    if (rows[0].email_verified) return res.json({ message: "Email already verified." });
+
+    const verifyToken = require("crypto").randomBytes(32).toString("hex");
+    await pool.query(
+      "UPDATE users SET email_verify_token = $1, email_verify_expires = now() + interval \'24 hours\' WHERE id = $2",
+      [verifyToken, rows[0].id]
+    );
+
+    const { rows: profileRows } = await pool.query("SELECT full_name FROM profiles WHERE user_id = $1", [rows[0].id]);
+    await sendVerificationEmail(email.toLowerCase(), profileRows[0]?.full_name || "there", verifyToken);
+    res.json({ message: "Verification email sent." });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
