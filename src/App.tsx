@@ -23,6 +23,7 @@ import TermsOfService from "./pages/TermsOfService";
 import CookiePolicy from "./pages/CookiePolicy";
 import Tutorial from "./pages/Tutorial";
 import FAQ from "./pages/FAQ";
+import VerifyEmail from "./pages/VerifyEmail";
 
 const queryClient = new QueryClient();
 
@@ -75,6 +76,7 @@ const App = () => (
               <Route path="/cookies" element={<CookiePolicy />} />
               <Route path="/tutorial" element={<Tutorial />} />
               <Route path="/faq" element={<FAQ />} />
+              <Route path="/verify-email" element={<VerifyEmail />} />
 
               {/* Collector routes */}
               <Route path="/dashboard" element={<ProtectedRoute requireRole="collector"><Dashboard /></ProtectedRoute>} />
