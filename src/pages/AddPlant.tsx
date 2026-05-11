@@ -66,6 +66,8 @@ const AddPlant = () => {
     }
   }, [user, authLoading, isCollector, navigate]);
 
+  const isTouchDevice = /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1);
+
   const validateDuplicateId = async (scannedId: string): Promise<boolean> => {
     try {
       const { data: existingSeed } = await api.checkSeedExists(scannedId.trim());
@@ -473,7 +475,7 @@ const AddPlant = () => {
               )}
 
               <div className="flex gap-3">
-                {isNative ? (
+                {isTouchDevice && isNative ? (
                   <>
                     <Button variant="outline" size="lg" className="flex-1" onClick={handleNativePhoto}>
                       <Camera className="w-4 h-4 mr-2" />
@@ -484,7 +486,7 @@ const AddPlant = () => {
                       Gallery
                     </Button>
                   </>
-                ) : (
+                ) : isTouchDevice ? (
                   <>
                     <label className="flex-1">
                       <Button variant="outline" size="lg" className="w-full" asChild>

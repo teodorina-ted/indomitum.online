@@ -129,7 +129,7 @@ const seedSchema = z.object({
   name: z.string().trim().min(1).max(255),
   quantity: z.number().int().min(0).default(0),
   notes: z.string().max(2000).nullable().optional(),
-  image_url: z.string().url().max(2000).nullable().optional(),
+  image_url: z.string().max(5000000).nullable().optional(),
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
   street: z.string().max(255).nullable().optional(),
@@ -330,6 +330,29 @@ app.post("/auth/login", authLimiter, validate(loginSchema), async (req, res) => 
   }
 });
 
+
+app.post("/auth/reset-password-confirm", authLimiter, async (req, res) => {
+  const { token, new_password } = req.body;
+  if (!token || !new_password) return res.status(400).json({ error: "Token and new password required" });
+  if (new_password.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+  try {
+    const { rows } = await pool.query(
+      "SELECT id FROM users WHERE email_verify_token = $1 AND email_verify_expires > now()",
+      [token]
+    );
+    if (!rows.length) return res.status(400).json({ error: "Invalid or expired reset link. Please request a new one." });
+
+    const hash = await require("bcryptjs").hash(new_password, 12);
+    await pool.query(
+      "UPDATE users SET password_hash = $1, email_verify_token = null, email_verify_expires = null WHERE id = $2",
+      [hash, rows[0].id]
+    );
+    res.json({ message: "Password reset successfully." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/auth/me", auth, async (req, res) => {
   try {
     const { rows: profileRows } = await pool.query("SELECT * FROM profiles WHERE user_id = $1", [req.user.id]);
@@ -378,8 +401,54 @@ app.post("/auth/resend-verification", authLimiter, async (req, res) => {
   }
 });
 
-app.post("/auth/reset-password", authLimiter, async (_req, res) => {
-  res.json({ message: "If that email exists, a reset link has been sent." });
+app.post("/auth/reset-password", authLimiter, async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Email required" });
+  try {
+    const { rows } = await pool.query("SELECT id FROM users WHERE email = $1", [email.toLowerCase()]);
+    if (!rows.length) return res.json({ message: "If that email exists, a reset link has been sent." });
+
+    const resetToken = require("crypto").randomBytes(32).toString("hex");
+    await pool.query(
+      "UPDATE users SET email_verify_token = $1, email_verify_expires = now() + interval '1 hour' WHERE id = $2",
+      [resetToken, rows[0].id]
+    );
+
+    const resetUrl = `${APP_URL}/reset-password?token=${resetToken}`;
+    const { rows: profileRows } = await pool.query("SELECT full_name FROM profiles WHERE user_id = $1", [rows[0].id]);
+    const name = profileRows[0]?.full_name || "there";
+
+    if (resend) {
+      await resend.emails.send({
+        from: "Indomitum <noreply@indomitum.online>",
+        to: email.toLowerCase(),
+        subject: "Reset your Indomitum password",
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
+            <div style="text-align:center;margin-bottom:24px">
+              <div style="display:inline-block;background:#2d5016;border-radius:12px;padding:12px">
+                <span style="color:white;font-size:24px">🌱</span>
+              </div>
+              <h1 style="color:#2d5016;margin:12px 0 4px">Indomitum</h1>
+            </div>
+            <h2 style="color:#1a1a1a">Reset your password</h2>
+            <p style="color:#555;line-height:1.6">Hi ${name}, click the button below to reset your password. This link expires in 1 hour.</p>
+            <div style="text-align:center;margin:32px 0">
+              <a href="${resetUrl}" style="background:#2d5016;color:white;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px">
+                Reset Password
+              </a>
+            </div>
+            <p style="color:#999;font-size:13px">If you did not request a password reset, you can ignore this email.</p>
+          </div>
+        `,
+      });
+    }
+
+    res.json({ message: "If that email exists, a reset link has been sent." });
+  } catch (err) {
+    console.error("Reset password error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/auth/update-password", auth, async (req, res) => {

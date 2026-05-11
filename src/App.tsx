@@ -24,6 +24,7 @@ import CookiePolicy from "./pages/CookiePolicy";
 import Tutorial from "./pages/Tutorial";
 import FAQ from "./pages/FAQ";
 import VerifyEmail from "./pages/VerifyEmail";
+import ResetPassword from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,7 @@ const App = () => (
               <Route path="/tutorial" element={<Tutorial />} />
               <Route path="/faq" element={<FAQ />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
               {/* Collector routes */}
               <Route path="/dashboard" element={<ProtectedRoute requireRole="collector"><Dashboard /></ProtectedRoute>} />
