@@ -518,7 +518,7 @@ const AddPlant = () => {
                       />
                     </label>
                   </>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
