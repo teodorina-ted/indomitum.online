@@ -55,9 +55,10 @@ const BarcodeItem = ({ seed }: { seed: SeedForBarcode }) => {
 const BulkBarcodeModal = ({
   open,
   onOpenChange,
-  seeds,
+  seeds: seedsProp,
   baseUrl,
 }: BulkBarcodeModalProps) => {
+  const seeds = Array.isArray(seedsProp) ? seedsProp : [];
   const printRef = useRef<HTMLDivElement>(null);
 
   const handleBulkPrint = () => {
@@ -179,7 +180,7 @@ const BulkBarcodeModal = ({
     printWindow.document.close();
   };
 
-  if (seeds.length === 0) return null;
+  if (!seeds.length) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
