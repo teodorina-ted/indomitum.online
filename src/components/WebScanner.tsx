@@ -20,17 +20,15 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
     setIsDecoding(true);
     const previewUrl = URL.createObjectURL(file);
     setPreview(previewUrl);
-
     try {
       const scanner = new Html5Qrcode("qr-file-decoder");
       const result = await scanner.scanFile(file, false);
-      await scanner.clear();
-
+      await scanner.clear().catch(() => {});
       if (result) {
         onScan(result);
       }
     } catch {
-      toast.error("No QR or barcode found. Make sure the code is clear and well-lit.");
+      toast.error("No QR or barcode found. Make sure the code is clear and try again.");
       setPreview(null);
       URL.revokeObjectURL(previewUrl);
     } finally {
@@ -47,32 +45,13 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
 
   return (
     <div className={className}>
-      {/* Hidden decoder element required by html5-qrcode */}
       <div id="qr-file-decoder" className="hidden" />
+      <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleChange} />
+      <input ref={galleryInputRef} type="file" accept="image/*" className="hidden" onChange={handleChange} />
 
-      {/* Camera input — opens native camera */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleChange}
-      />
-
-      {/* Gallery input — opens file picker */}
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleChange}
-      />
-
-      {/* Preview */}
       {preview && (
         <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden border border-border mb-4 relative">
-          <img src={preview} alt="Scanned" className="w-full object-cover max-h-48" />
+          <img src={preview} alt="Captured" className="w-full object-cover max-h-48" />
           {isDecoding && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-2xl">
               <Loader2 className="w-8 h-8 text-white animate-spin" />
@@ -81,25 +60,12 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
         </div>
       )}
 
-      {/* Buttons */}
       <div className="flex flex-col gap-3 max-w-xs mx-auto">
-        <Button
-          onClick={() => cameraInputRef.current?.click()}
-          size="lg"
-          className="w-full"
-          disabled={isDecoding}
-        >
+        <Button onClick={() => cameraInputRef.current?.click()} size="lg" className="w-full" disabled={isDecoding}>
           <Camera className="w-4 h-4 mr-2" />
           {isDecoding ? "Reading Code..." : "Scan with Camera"}
         </Button>
-
-        <Button
-          onClick={() => galleryInputRef.current?.click()}
-          size="lg"
-          variant="outline"
-          className="w-full"
-          disabled={isDecoding}
-        >
+        <Button onClick={() => galleryInputRef.current?.click()} size="lg" variant="outline" className="w-full" disabled={isDecoding}>
           <Upload className="w-4 h-4 mr-2" /> Upload from Gallery
         </Button>
       </div>
