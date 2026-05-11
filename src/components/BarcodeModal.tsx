@@ -1,6 +1,6 @@
-import { useRef, useEffect } from "react";
-import { escHtml } from "@/lib/escapeHtml";
+import { useRef, useEffect, useState } from "react";
 import JsBarcode from "jsbarcode";
+import { QRCodeCanvas } from "qrcode.react";
 import {
   Dialog,
   DialogContent,
@@ -18,23 +18,6 @@ interface BarcodeModalProps {
   passportUrl: string;
 }
 
-// Helper to extract clean ID from potential HYPERLINK formula
-const cleanSeedId = (rawId: string): string => {
-  // Handle =HYPERLINK("url","text") format
-  const hyperlinkMatch = rawId.match(/=HYPERLINK\s*\(\s*"[^"]*"\s*,\s*"([^"]*)"\s*\)/i);
-  if (hyperlinkMatch) {
-    return hyperlinkMatch[1];
-  }
-  // Handle =HYPERLINK("url") format
-  const simpleMatch = rawId.match(/=HYPERLINK\s*\(\s*"([^"]*)"\s*\)/i);
-  if (simpleMatch) {
-    // Extract ID from URL if possible
-    const urlParts = simpleMatch[1].split('/');
-    return urlParts[urlParts.length - 1] || rawId;
-  }
-  return rawId;
-};
-
 const BarcodeModal = ({
   open,
   onOpenChange,
@@ -43,216 +26,143 @@ const BarcodeModal = ({
   passportUrl,
 }: BarcodeModalProps) => {
   const barcodeRef = useRef<SVGSVGElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Clean the seed ID in case it contains a HYPERLINK formula
-  const displayId = cleanSeedId(seedId);
-  const displayName = cleanSeedId(seedName);
+  const qrRef = useRef<HTMLCanvasElement>(null);
+  const [mode, setMode] = useState<"qr" | "barcode">("qr");
 
   useEffect(() => {
-    if (open && barcodeRef.current && displayId) {
-      // Small delay to ensure DOM is ready
+    if (open && mode === "barcode" && barcodeRef.current && seedId) {
       const timer = setTimeout(() => {
         try {
-          // Clear previous content
-          if (barcodeRef.current) {
-            barcodeRef.current.innerHTML = '';
-          }
-          
-          // Calculate width based on barcode length (long IDs need thinner bars)
-          const barcodeWidth =
-            displayId.length > 24 ? 1.1 : displayId.length > 16 ? 1.4 : displayId.length > 10 ? 1.8 : 2.2;
-          
-          JsBarcode(barcodeRef.current, displayId, {
+          if (barcodeRef.current) barcodeRef.current.innerHTML = "";
+          const w = seedId.length > 24 ? 1.1 : seedId.length > 16 ? 1.4 : seedId.length > 10 ? 1.8 : 2.2;
+          JsBarcode(barcodeRef.current, seedId, {
             format: "CODE128",
-            width: barcodeWidth,
-            height: displayId.length > 24 ? 46 : 56,
+            width: w,
+            height: 56,
             displayValue: true,
             fontSize: 11,
             margin: 8,
-            // Theme-safe colors (HSL tokens)
-            background: "hsl(var(--card))",
-            lineColor: "hsl(var(--card-foreground))",
+            background: "#ffffff",
+            lineColor: "#1a1a1a",
             textMargin: 4,
           });
-        } catch (error) {
-          console.error("Barcode generation error:", error);
+        } catch (err) {
+          console.error("Barcode error:", err);
         }
-      }, 300);
-      
+      }, 100);
       return () => clearTimeout(timer);
     }
-  }, [open, displayId]);
-
-  const handlePrint = () => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
-    const svg = barcodeRef.current;
-    if (!svg) return;
-
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
-    const svgUrl = URL.createObjectURL(svgBlob);
-
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Barcode - ${displayName}</title>
-          <style>
-            body {
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              min-height: 100vh;
-              margin: 0;
-              font-family: system-ui, -apple-system, sans-serif;
-              background: white;
-            }
-            .container {
-              text-align: center;
-              padding: 40px;
-              border: 2px solid #e5e7eb;
-              border-radius: 16px;
-            }
-            .logo {
-              width: 48px;
-              height: 48px;
-              margin: 0 auto 16px;
-              background: #22c55e;
-              border-radius: 12px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            }
-            h1 {
-              margin: 0 0 8px;
-              font-size: 24px;
-              color: #111827;
-            }
-            .id {
-              font-family: monospace;
-              font-size: 14px;
-              color: #6b7280;
-              margin-bottom: 24px;
-            }
-            img {
-              max-width: 300px;
-              height: auto;
-            }
-            .scan-text {
-              margin-top: 24px;
-              font-size: 14px;
-              color: #6b7280;
-            }
-            @media print {
-              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="logo">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
-            </div>
-            <h1>${escHtml(displayName)}</h1>
-            <div class="id">ID: ${escHtml(displayId)}</div>
-            <img src="${svgUrl}" alt="Barcode" />
-            <div class="scan-text">Scan to view Plant Passport</div>
-          </div>
-          <script>
-            window.onload = function() {
-              setTimeout(function() {
-                window.print();
-                window.close();
-              }, 250);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-  };
+  }, [open, mode, seedId]);
 
   const handleDownload = () => {
-    const svg = barcodeRef.current;
-    if (!svg) return;
-
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const svgData = new XMLSerializer().serializeToString(svg);
-    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
-    const svgUrl = URL.createObjectURL(svgBlob);
-
-    const img = new Image();
-    img.onload = () => {
-      canvas.width = img.width * 2;
-      canvas.height = img.height * 2;
-      ctx.fillStyle = "white";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-      const pngUrl = canvas.toDataURL("image/png");
+    if (mode === "qr") {
+      const canvas = document.getElementById("seed-qr-canvas") as HTMLCanvasElement;
+      if (canvas) {
+        const link = document.createElement("a");
+        link.download = `${seedId}-qr.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      }
+    } else if (barcodeRef.current) {
+      const blob = new Blob([barcodeRef.current.outerHTML], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.download = `barcode-${displayId}.png`;
-      link.href = pngUrl;
+      link.download = `${seedId}-barcode.svg`;
+      link.href = url;
       link.click();
+      URL.revokeObjectURL(url);
+    }
+  };
 
-      URL.revokeObjectURL(svgUrl);
-    };
-    img.src = svgUrl;
+  const handlePrint = () => {
+    const canvas = document.getElementById("seed-qr-canvas") as HTMLCanvasElement;
+    const imgSrc = mode === "qr" && canvas ? canvas.toDataURL() : "";
+    const barcodeSvg = mode === "barcode" && barcodeRef.current ? barcodeRef.current.outerHTML : "";
+
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.write(`<html><body style="text-align:center;font-family:sans-serif;padding:20px">
+        <p style="font-size:16px"><strong>${seedName}</strong></p>
+        <p style="font-size:13px;color:#666">ID: ${seedId}</p>
+        ${imgSrc ? `<img src="${imgSrc}" style="width:200px;height:200px;margin:12px auto;display:block"/>` : ""}
+        ${barcodeSvg}
+        <p style="font-size:11px;color:#999;margin-top:8px">Scan to view plant passport</p>
+      </body></html>`);
+      w.document.close();
+      w.print();
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xs sm:max-w-sm">
+      <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Leaf className="w-5 h-5 text-primary" />
-            Barcode
+            <Leaf className="w-4 h-4 text-primary" />
+            {seedName}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
-          <div className="text-center">
-            <h3 className="font-semibold text-foreground text-sm truncate">{displayName}</h3>
-            <p className="text-xs text-muted-foreground font-mono truncate">{displayId}</p>
-          </div>
+        <p className="text-sm text-muted-foreground text-center">ID: {seedId}</p>
 
-          <div
-            ref={containerRef}
-            className="flex justify-center items-center p-3 bg-card rounded-lg border border-border min-h-[120px] overflow-hidden"
+        {/* Mode toggle */}
+        <div className="flex rounded-lg border border-border overflow-hidden">
+          <button
+            onClick={() => setMode("qr")}
+            className={`flex-1 py-2 text-sm font-medium transition-colors ${
+              mode === "qr" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+            }`}
           >
-            <svg
-              ref={barcodeRef}
-              className="w-full h-auto max-w-[280px]"
-              preserveAspectRatio="xMidYMid meet"
-            />
-          </div>
+            QR Code
+          </button>
+          <button
+            onClick={() => setMode("barcode")}
+            className={`flex-1 py-2 text-sm font-medium transition-colors ${
+              mode === "barcode" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            Barcode
+          </button>
+        </div>
 
-          <p className="text-xs text-center text-muted-foreground">
-            Scan to view passport
-          </p>
-
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={handleDownload}
-            >
-              <Download className="w-4 h-4 mr-1" />
-              Download
-            </Button>
-            <Button size="sm" className="flex-1" onClick={handlePrint}>
-              <Printer className="w-4 h-4 mr-1" />
-              Print
-            </Button>
+        {/* QR Code — links directly to passport */}
+        {mode === "qr" && (
+          <div className="flex flex-col items-center gap-2">
+            <div className="bg-white p-3 rounded-xl border border-border">
+              <QRCodeCanvas
+                id="seed-qr-canvas"
+                value={passportUrl}
+                size={200}
+                level="M"
+                includeMargin={false}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              Scan to open plant passport
+            </p>
+            <p className="text-xs text-primary/70 text-center break-all">{passportUrl}</p>
           </div>
+        )}
+
+        {/* Barcode — shows seed ID */}
+        {mode === "barcode" && (
+          <div className="flex flex-col items-center gap-2">
+            <div className="bg-white p-3 rounded-xl border border-border w-full overflow-x-auto">
+              <svg ref={barcodeRef} className="mx-auto" />
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              Bag ID: {seedId}
+            </p>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <Button variant="outline" className="flex-1" onClick={handleDownload}>
+            <Download className="w-4 h-4 mr-2" /> Download
+          </Button>
+          <Button className="flex-1" onClick={handlePrint}>
+            <Printer className="w-4 h-4 mr-2" /> Print
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
