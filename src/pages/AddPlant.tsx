@@ -38,7 +38,7 @@ const AddPlant = () => {
   const { isNative, takePhoto, pickFromGallery } = useNativeCamera();
   const { isNative: canScan, scanBarcode } = useBarcodeScanner();
   const [isScanning, setIsScanning] = useState(false);
-  const [showWebScanner, setShowWebScanner] = useState(false);
+  const [showWebScanner, setShowWebScanner] = useState(true);
   
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -252,13 +252,17 @@ const AddPlant = () => {
 
       let imageUrl = null;
 
-      // Upload image if exists
+      // Convert image to base64 data URL (no external upload needed)
       if (formData.image) {
-        const { url, error: uploadError } = await api.uploadImage(formData.image, formData.id);
-        if (uploadError) {
-          console.error("Upload error:", uploadError);
-        } else {
-          imageUrl = url;
+        try {
+          const reader = new FileReader();
+          imageUrl = await new Promise<string>((resolve, reject) => {
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(formData.image!);
+          });
+        } catch (err) {
+          console.error("Image conversion error:", err);
         }
       }
 
@@ -385,7 +389,7 @@ const AddPlant = () => {
 
             <div className="space-y-6">
               {/* Scanner always visible, auto-starts */}
-              {!formData.id && showWebScanner !== false && <WebScanner onScan={handleWebScan} autoStart />}
+              {!formData.id && <WebScanner onScan={handleWebScan} />}
 
               {/* Show scanned result */}
               {formData.id && (
@@ -754,7 +758,13 @@ const AddPlant = () => {
           {currentStep < 4 ? (
             <Button
               size="lg"
-              onClick={() => setCurrentStep((currentStep + 1) as Step)}
+              onClick={async () => {
+                if (currentStep === 1 && formData.id) {
+                  const isValid = await validateDuplicateId(formData.id.trim());
+                  if (!isValid) return;
+                }
+                setCurrentStep((currentStep + 1) as Step);
+              }}
               disabled={!canProceed()}
               className="flex-1"
             >
