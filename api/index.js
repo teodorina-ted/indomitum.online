@@ -173,14 +173,15 @@ async function auth(req, res, next) {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return res.status(401).json({ error: "Unauthorized" });
   try {
-    const payload = jwt.verify(header.slice(7), JWT_SECRET);
+    const token = header.slice(7);
+    const payload = jwt.verify(token, JWT_SECRET);
     req.user = payload;
-    // Attach org_id to every request
     const { rows } = await pool.query("SELECT organization_id FROM users WHERE id = $1", [payload.id]);
     req.user.organization_id = rows[0]?.organization_id || null;
     next();
-  } catch {
-    res.status(401).json({ error: "Invalid or expired token" });
+  } catch (err) {
+    console.error("JWT verify error:", err.message, "secret prefix:", JWT_SECRET?.substring(0, 10));
+    res.status(401).json({ error: err.message || "Invalid or expired token" });
   }
 }
 
