@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useRef, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
-import { Camera, StopCircle, Loader2 } from "lucide-react";
+import { Camera, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface WebScannerProps {
@@ -10,137 +10,99 @@ interface WebScannerProps {
   autoStart?: boolean;
 }
 
-const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerProps) => {
-  const [isScanning, setIsScanning] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const containerIdRef = useRef(`scanner-${Math.random().toString(36).substr(2, 9)}`);
+const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const [isDecoding, setIsDecoding] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
 
-  // Auto-start on mount
-  useEffect(() => {
-    if (autoStart) {
-      startScanner();
-    }
-  }, []);
-
-  const stopScanner = useCallback(async () => {
-    if (scannerRef.current) {
-      try {
-        if (scannerRef.current.isScanning) {
-          await scannerRef.current.stop();
-        }
-        await scannerRef.current.clear();
-      } catch (error) {
-        console.error("Error stopping scanner:", error);
-      }
-      scannerRef.current = null;
-    }
-    setIsScanning(false);
-  }, []);
-
-  const startScanner = useCallback(async () => {
-    if (!containerRef.current || isScanning) return;
-
-    setIsStarting(true);
+  const decodeFile = async (file: File) => {
+    setIsDecoding(true);
+    const previewUrl = URL.createObjectURL(file);
+    setPreview(previewUrl);
 
     try {
-      // Clean up any existing scanner
-      await stopScanner();
+      const scanner = new Html5Qrcode("qr-file-decoder");
+      const result = await scanner.scanFile(file, false);
+      await scanner.clear();
 
-      // Create new scanner instance
-      scannerRef.current = new Html5Qrcode(containerIdRef.current, {
-        verbose: false,
-      });
-
-      // Request camera and start scanning
-      await scannerRef.current.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 200, height: 200 },
-          aspectRatio: 1,
-        },
-        (decodedText) => {
-          // On successful scan - stop first, then notify parent
-          stopScanner();
-          onScan(decodedText);
-        },
-        () => {
-          // QR code not detected - called frequently, no action needed
-        }
-      );
-
-      setIsScanning(true);
-
-      // iOS Safari fix: ensure video has playsinline and muted
-      const videoElement = containerRef.current?.querySelector("video");
-      if (videoElement) {
-        videoElement.setAttribute("playsinline", "true");
-        videoElement.setAttribute("muted", "true");
-        videoElement.playsInline = true;
-        videoElement.muted = true;
+      if (result) {
+        onScan(result);
       }
-    } catch (error) {
-      console.error("Scanner error:", error);
-      if (error instanceof Error) {
-        if (error.message.includes("Permission")) {
-          toast.error("Camera permission denied. Please allow camera access.");
-        } else {
-          toast.error("Failed to start scanner. Try again.");
-        }
-      }
+    } catch {
+      toast.error("No QR or barcode found. Make sure the code is clear and well-lit.");
+      setPreview(null);
+      URL.revokeObjectURL(previewUrl);
     } finally {
-      setIsStarting(false);
+      setIsDecoding(false);
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
+      if (galleryInputRef.current) galleryInputRef.current.value = "";
     }
-  }, [isScanning, onScan, stopScanner]);
+  };
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopScanner();
-    };
-  }, [stopScanner]);
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) decodeFile(file);
+  };
 
   return (
     <div className={className}>
-      {/* Scanner Container */}
-      <div
-        id={containerIdRef.current}
-        ref={containerRef}
-        className="w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden bg-muted/30 border-2 border-dashed border-border"
-        style={{ minHeight: isScanning ? "250px" : "0" }}
+      {/* Hidden decoder element required by html5-qrcode */}
+      <div id="qr-file-decoder" className="hidden" />
+
+      {/* Camera input — opens native camera */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleChange}
       />
 
-      {/* Controls */}
-      <div className="flex justify-center mt-4">
-        {!isScanning ? (
-          <Button onClick={startScanner} size="lg" disabled={isStarting}>
-            {isStarting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Starting...
-              </>
-            ) : (
-              <>
-                <Camera className="w-4 h-4 mr-2" />
-                Scan with Camera
-              </>
-            )}
-          </Button>
-        ) : (
-          <Button onClick={stopScanner} variant="destructive" size="lg">
-            <StopCircle className="w-4 h-4 mr-2" />
-            Stop Scanner
-          </Button>
-        )}
-      </div>
+      {/* Gallery input — opens file picker */}
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleChange}
+      />
 
-      {isScanning && (
-        <p className="text-xs text-muted-foreground text-center mt-2">
-          Point camera at QR code or barcode
-        </p>
+      {/* Preview */}
+      {preview && (
+        <div className="w-full max-w-xs mx-auto rounded-2xl overflow-hidden border border-border mb-4 relative">
+          <img src={preview} alt="Scanned" className="w-full object-cover max-h-48" />
+          {isDecoding && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-2xl">
+              <Loader2 className="w-8 h-8 text-white animate-spin" />
+            </div>
+          )}
+        </div>
       )}
+
+      {/* Buttons */}
+      <div className="flex flex-col gap-3 max-w-xs mx-auto">
+        <Button
+          onClick={() => cameraInputRef.current?.click()}
+          size="lg"
+          className="w-full"
+          disabled={isDecoding}
+        >
+          <Camera className="w-4 h-4 mr-2" />
+          {isDecoding ? "Reading Code..." : "Scan with Camera"}
+        </Button>
+
+        <Button
+          onClick={() => galleryInputRef.current?.click()}
+          size="lg"
+          variant="outline"
+          className="w-full"
+          disabled={isDecoding}
+        >
+          <Upload className="w-4 h-4 mr-2" /> Upload from Gallery
+        </Button>
+      </div>
     </div>
   );
 };
