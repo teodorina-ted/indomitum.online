@@ -137,26 +137,22 @@ const Login = () => {
         if (error) {
           const msg = error.message || "";
           if (msg.includes("EMAIL_NOT_VERIFIED") || msg.toLowerCase().includes("verify your email")) {
-            toast.error("Please verify your email before logging in. Check your inbox or request a new link.", { duration: 6000 });
-            // Offer resend
             const resendEmail = errorEmail || formData.email.trim();
-            if (resendEmail) {
-              setTimeout(() => {
-                toast("Didn't get the email?", {
-                  action: {
-                    label: "Resend",
-                    onClick: async () => {
-                      await fetch(`${import.meta.env.VITE_API_URL || ""}/auth/resend-verification`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ email: resendEmail }),
-                      });
-                      toast.success("Verification email resent!");
-                    },
-                  },
-                });
-              }, 1000);
-            }
+            toast("Check your inbox", {
+              description: "Verify your email to continue. Check spam too.",
+              duration: 8000,
+              action: {
+                label: "Resend email",
+                onClick: async () => {
+                  await fetch(`${import.meta.env.VITE_API_URL || ""}/auth/resend-verification`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: resendEmail }),
+                  });
+                  toast.success("Verification email sent!");
+                },
+              },
+            });
           } else if (msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("password") || msg.toLowerCase().includes("not found")) {
             toast.error("No account found with these credentials. Check your email and password, or sign up.");
           } else if (msg.toLowerCase().includes("network") || msg.toLowerCase().includes("fetch")) {
@@ -166,13 +162,15 @@ const Login = () => {
           }
         } else {
           toast.success("Welcome back!");
-          const { data: meData } = await (await import("@/lib/api")).api.me();
-          const roles = meData?.roles || [];
-          if (roles.includes("collector") || roles.includes("admin")) {
-            navigate("/dashboard");
-          } else {
-            navigate("/buyer");
-          }
+          // Use isCollector from auth context (updated by signIn)
+          setTimeout(() => {
+            const roles = JSON.parse(localStorage.getItem("auth_roles") || "[]");
+            if (roles.includes("collector") || roles.includes("admin")) {
+              navigate("/dashboard");
+            } else {
+              navigate("/buyer");
+            }
+          }, 100);
         }
       }
     } catch (err: any) {

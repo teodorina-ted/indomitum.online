@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Leaf, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -7,32 +7,17 @@ const API_URL = import.meta.env.VITE_API_URL || "";
 
 const VerifyEmail = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
-  const [message, setMessage] = useState("");
 
   useEffect(() => {
     const token = searchParams.get("token");
-    if (!token) {
-      setStatus("error");
-      setMessage("Invalid verification link.");
-      return;
-    }
+    if (!token) { setStatus("error"); return; }
 
     fetch(`${API_URL}/auth/verify-email?token=${token}`)
       .then((r) => r.json())
-      .then((data) => {
-        if (data.error) {
-          setStatus("error");
-          setMessage(data.error);
-        } else {
-          setStatus("success");
-          setMessage(data.message);
-        }
-      })
-      .catch(() => {
-        setStatus("error");
-        setMessage("Could not connect to server. Please try again.");
-      });
+      .then((data) => setStatus(data.error ? "error" : "success"))
+      .catch(() => setStatus("error"));
   }, []);
 
   return (
@@ -44,34 +29,32 @@ const VerifyEmail = () => {
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-foreground">Indomitum</h1>
-
         {status === "loading" && (
           <div className="space-y-3">
             <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
-            <p className="text-muted-foreground">Verifying your email...</p>
+            <p className="text-muted-foreground">Verifying...</p>
           </div>
         )}
 
         {status === "success" && (
           <div className="space-y-4">
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto" />
-            <h2 className="text-xl font-semibold text-foreground">Email Verified!</h2>
-            <p className="text-muted-foreground">{message}</p>
-            <Link to="/login">
-              <Button className="w-full">Sign In to Your Account</Button>
-            </Link>
+            <h2 className="text-2xl font-bold text-foreground">You're verified!</h2>
+            <p className="text-muted-foreground">Your account is ready. You can now sign in.</p>
+            <Button className="w-full" size="lg" onClick={() => navigate("/login")}>
+              Continue to App →
+            </Button>
           </div>
         )}
 
         {status === "error" && (
           <div className="space-y-4">
             <XCircle className="w-16 h-16 text-destructive mx-auto" />
-            <h2 className="text-xl font-semibold text-foreground">Verification Failed</h2>
-            <p className="text-muted-foreground">{message}</p>
-            <Link to="/login">
-              <Button variant="outline" className="w-full">Back to Login</Button>
-            </Link>
+            <h2 className="text-xl font-bold text-foreground">Link expired</h2>
+            <p className="text-muted-foreground">This link is invalid or has expired. Request a new one from the login page.</p>
+            <Button variant="outline" className="w-full" onClick={() => navigate("/login")}>
+              Back to Login
+            </Button>
           </div>
         )}
       </div>
