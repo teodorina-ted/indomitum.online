@@ -1,245 +1,186 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Camera, StopCircle, Copy, Check } from "lucide-react";
+import { ArrowLeft, Camera, StopCircle, Search, Leaf } from "lucide-react";
 import { toast } from "sonner";
 
 const Scanner = () => {
   const navigate = useNavigate();
   const [isScanning, setIsScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [manualId, setManualId] = useState("");
+  const [starting, setStarting] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const mountedRef = useRef(true);
 
-  const startScanner = useCallback(async () => {
-    if (!containerRef.current) return;
-
-    try {
-      // Create scanner instance
-      scannerRef.current = new Html5Qrcode("scanner-container", {
-        verbose: false,
-        formatsToSupport: undefined, // Support all formats
-      });
-
-      // Request camera and start scanning
-      await scannerRef.current.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1,
-        },
-        (decodedText) => {
-          setScanResult(decodedText);
-          toast.success("Code scanned!");
-          stopScanner();
-          // Extract seed ID and navigate to passport
-          let seedId = decodedText.trim();
-          if (seedId.includes("/passport/")) {
-            seedId = decodeURIComponent(seedId.split("/passport/").pop().split("?")[0]);
-          }
-          navigate("/passport/" + encodeURIComponent(seedId));
-        },
-        () => {
-          // QR code not detected - this is called frequently, no action needed
-        }
-      );
-
-      setIsScanning(true);
-
-      // iOS Safari fix: ensure video has playsinline and muted
-      const videoElement = containerRef.current?.querySelector("video");
-      if (videoElement) {
-        videoElement.setAttribute("playsinline", "true");
-        videoElement.setAttribute("muted", "true");
-        videoElement.playsInline = true;
-        videoElement.muted = true;
-      }
-    } catch (error) {
-      console.error("Scanner error:", error);
-      if (error instanceof Error) {
-        if (error.message.includes("Permission")) {
-          toast.error("Camera permission denied. Please allow camera access.");
-        } else {
-          toast.error(`Failed to start scanner: ${error.message}`);
-        }
-      }
-    }
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      stopScanner();
+    };
   }, []);
+
+  const extractSeedId = (raw: string): string => {
+    try {
+      if (raw.includes("/passport/")) {
+        return decodeURIComponent(raw.split("/passport/").pop()!.split("?")[0]);
+      }
+      if (raw.startsWith("http")) {
+        const parts = new URL(raw).pathname.split("/").filter(Boolean);
+        return parts[parts.length - 1] || raw;
+      }
+    } catch {}
+    return raw.trim();
+  };
+
+  const goToPassport = (seedId: string) => {
+    const id = extractSeedId(seedId);
+    if (!id) { toast.error("Invalid code"); return; }
+    navigate(`/passport/${encodeURIComponent(id)}`);
+  };
 
   const stopScanner = useCallback(async () => {
-    if (scannerRef.current?.isScanning) {
+    if (scannerRef.current) {
       try {
-        await scannerRef.current.stop();
+        if (scannerRef.current.isScanning) await scannerRef.current.stop();
         await scannerRef.current.clear();
-      } catch (error) {
-        console.error("Error stopping scanner:", error);
-      }
+      } catch {}
+      scannerRef.current = null;
     }
-    setIsScanning(false);
+    if (mountedRef.current) setIsScanning(false);
   }, []);
 
-  const copyToClipboard = async () => {
-    if (scanResult) {
-      await navigator.clipboard.writeText(scanResult);
-      setCopied(true);
-      toast.success("Copied to clipboard!");
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
+  const startScanner = useCallback(async () => {
+    setStarting(true);
+    try {
+      await stopScanner();
 
-  const resetScanner = () => {
-    setScanResult(null);
-    setCopied(false);
-  };
+      scannerRef.current = new Html5Qrcode("buyer-scanner-container", {
+        verbose: false,
+        formatsToSupport: undefined, // all formats
+      });
+
+      await scannerRef.current.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 },
+        (decodedText) => {
+          stopScanner();
+          toast.success("Code scanned!");
+          goToPassport(decodedText);
+        },
+        () => {}
+      );
+
+      if (mountedRef.current) setIsScanning(true);
+
+      // iOS Safari fix
+      const video = document.querySelector("#buyer-scanner-container video") as HTMLVideoElement;
+      if (video) {
+        video.setAttribute("playsinline", "true");
+        video.muted = true;
+        (video as any).playsInline = true;
+      }
+    } catch (error: any) {
+      const msg = error?.message || "";
+      if (msg.includes("Permission") || msg.includes("NotAllowed")) {
+        toast.error("Camera permission denied. Please allow camera access.");
+      } else if (msg.includes("NotFound")) {
+        toast.error("No camera found on this device.");
+      } else {
+        toast.error("Could not start scanner. Try again.");
+      }
+    } finally {
+      if (mountedRef.current) setStarting(false);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-        <div className="container flex h-14 items-center gap-4 px-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              stopScanner();
-              navigate(-1);
-            }}
-          >
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
+        <div className="flex h-14 items-center gap-4 px-4 max-w-lg mx-auto">
+          <Button variant="ghost" size="icon" onClick={() => { stopScanner(); navigate(-1); }}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <h1 className="font-semibold text-lg">Scanner</h1>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
+              <Leaf className="w-3.5 h-3.5 text-primary-foreground" />
+            </div>
+            <h1 className="font-semibold text-lg">Scan Product</h1>
+          </div>
         </div>
       </header>
 
-      <main className="container px-4 py-6 space-y-6">
-        {/* Scanner Area */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-center">
-              {isScanning ? "Point at a QR/Barcode" : "Barcode & QR Scanner"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Scanner Container */}
-            <div
-              id="scanner-container"
-              ref={containerRef}
-              className="w-full aspect-square max-w-sm mx-auto rounded-lg overflow-hidden bg-muted"
-              style={{ minHeight: isScanning ? "300px" : "0" }}
-            />
+      <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        {/* Title */}
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-foreground">Scan Your Product</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Enter the ID from your seed bag to view its Plant Passport
+          </p>
+        </div>
 
-            {/* Controls */}
-            <div className="flex justify-center gap-4">
-              {!isScanning && !scanResult && (
-                <Button onClick={startScanner} size="lg" className="gap-2">
-                  <Camera className="h-5 w-5" />
-                  Start Scanner
-                </Button>
-              )}
+        {/* Scanner box — same style as collector */}
+        <div
+          id="buyer-scanner-container"
+          className="w-full aspect-square max-w-sm mx-auto rounded-2xl overflow-hidden bg-muted border-2 border-dashed border-border"
+          style={{ minHeight: isScanning ? "300px" : "200px" }}
+        />
 
-              {isScanning && (
-                <Button
-                  onClick={stopScanner}
-                  variant="destructive"
-                  size="lg"
-                  className="gap-2"
-                >
-                  <StopCircle className="h-5 w-5" />
-                  Stop Scanner
-                </Button>
-              )}
+        {/* Controls */}
+        <div className="flex justify-center">
+          {!isScanning ? (
+            <Button onClick={startScanner} size="lg" className="gap-2 w-full max-w-xs" disabled={starting}>
+              <Camera className="h-5 w-5" />
+              {starting ? "Starting..." : "Scan with Camera"}
+            </Button>
+          ) : (
+            <Button onClick={stopScanner} variant="destructive" size="lg" className="gap-2 w-full max-w-xs">
+              <StopCircle className="h-5 w-5" />
+              Stop Scanning
+            </Button>
+          )}
+        </div>
 
-              {scanResult && !isScanning && (
-                <Button onClick={resetScanner} size="lg" className="gap-2">
-                  <Camera className="h-5 w-5" />
-                  Scan Again
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Divider */}
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-background px-2 text-muted-foreground">or enter ID manually</span>
+          </div>
+        </div>
 
-        {/* Result Display */}
-        {scanResult && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-center text-primary">
-                Scan Result
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  value={scanResult}
-                  readOnly
-                  className="font-mono text-sm"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={copyToClipboard}
-                >
-                  {copied ? (
-                    <Check className="h-4 w-4 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-
-              {/* If it's a URL, show open button */}
-              {scanResult.startsWith("http") && (() => {
-                const isAllowedUrl = (url: string) => {
-                  try {
-                    const parsed = new URL(url);
-                    const allowedDomains = [
-                      'indomitum.online',
-                      window.location.hostname,
-                    ];
-                    return allowedDomains.some(domain =>
-                      parsed.hostname === domain || parsed.hostname.endsWith('.' + domain)
-                    );
-                  } catch {
-                    return false;
-                  }
-                };
-                const allowed = isAllowedUrl(scanResult);
-                return (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => {
-                      if (allowed) {
-                        window.open(scanResult, "_blank");
-                      } else if (window.confirm(`This link goes to an external site:\n${scanResult}\n\nContinue?`)) {
-                        window.open(scanResult, "_blank");
-                      }
-                    }}
-                  >
-                    {allowed ? "Open Link" : "Open External Link ⚠️"}
-                  </Button>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        )}
+        {/* Manual input */}
+        <div className="space-y-3">
+          <Input
+            placeholder="e.g., SEED-ABC123"
+            value={manualId}
+            onChange={e => setManualId(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && manualId.trim()) goToPassport(manualId); }}
+            className="text-center font-mono"
+          />
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={!manualId.trim()}
+            onClick={() => goToPassport(manualId)}
+          >
+            <Search className="w-4 h-4 mr-2" />
+            View Passport
+          </Button>
+        </div>
 
         {/* Instructions */}
-        <Card className="bg-muted/50">
-          <CardContent className="pt-6">
-            <ul className="text-sm text-muted-foreground space-y-2">
-              <li>• Tap "Start Scanner" to request camera access</li>
-              <li>• Point your camera at any QR code or barcode</li>
-              <li>• Supports QR codes, EAN, UPC, Code 128, and more</li>
-              <li>• Works best in good lighting conditions</li>
-            </ul>
-          </CardContent>
-        </Card>
+        <div className="bg-muted/50 rounded-xl p-4">
+          <ul className="text-sm text-muted-foreground space-y-1.5">
+            <li>• Tap "Scan with Camera" to start the live scanner</li>
+            <li>• Point at the QR code or barcode on the seed bag</li>
+            <li>• The plant passport will open automatically</li>
+            <li>• You can then save it to your list or favorites</li>
+          </ul>
+        </div>
       </main>
     </div>
   );
