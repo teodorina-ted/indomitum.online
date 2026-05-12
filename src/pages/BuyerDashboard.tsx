@@ -87,8 +87,7 @@ interface SeedPassport {
   created_at: string;
 }
 
-// Favorites stored locally
-const FAVORITES_KEY = "indomitum_buyer_favorites";
+// Favorites stored in DB
 
 const BuyerDashboard = () => {
   const { user, profile, signOut, isLoading: authLoading, isCollector } = useAuth();
@@ -131,17 +130,13 @@ const BuyerDashboard = () => {
   const [pendingSeedIdToUuid, setPendingSeedIdToUuid] = useState<Record<string, string>>({});
   const [pendingAssignedUuids, setPendingAssignedUuids] = useState<Set<string>>(new Set());
 
-  // Load favorites from localStorage
+  // Load favorites from DB
   useEffect(() => {
-    const stored = localStorage.getItem(FAVORITES_KEY);
-    if (stored) {
-      try {
-        setFavorites(JSON.parse(stored));
-      } catch {
-        setFavorites([]);
-      }
-    }
-  }, []);
+    if (!user) return;
+    api.getFavorites().then(({ data }) => {
+      if (data) setFavorites(data);
+    });
+  }, [user]);
 
   useEffect(() => {
     try {
@@ -152,21 +147,17 @@ const BuyerDashboard = () => {
     }
   }, []);
 
-  // Save favorites to localStorage
-  const saveFavorites = (newFavorites: SeedPassport[]) => {
-    setFavorites(newFavorites);
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(newFavorites));
-  };
-
   const isFavorite = (seedId: string) => favorites.some(f => f.seed_id === seedId);
 
-  const toggleFavorite = (seed: SeedPassport) => {
+  const toggleFavorite = async (seed: SeedPassport) => {
     if (isFavorite(seed.seed_id)) {
-      saveFavorites(favorites.filter(f => f.seed_id !== seed.seed_id));
+      setFavorites(prev => prev.filter(f => f.seed_id !== seed.seed_id));
+      await api.removeFavorite(seed.seed_id);
       toast.success("Removed from favorites");
     } else {
-      saveFavorites([...favorites, seed]);
-      toast.success("Added to favorites!");
+      setFavorites(prev => [...prev, seed]);
+      await api.addFavorite(seed.seed_id);
+      toast.success("Added to favorites! ❤️");
     }
   };
 

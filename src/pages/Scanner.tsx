@@ -34,10 +34,15 @@ const Scanner = () => {
           aspectRatio: 1,
         },
         (decodedText) => {
-          // On successful scan
           setScanResult(decodedText);
-          toast.success("Code scanned successfully!");
+          toast.success("Code scanned!");
           stopScanner();
+          // Extract seed ID and navigate to passport
+          let seedId = decodedText.trim();
+          if (seedId.includes("/passport/")) {
+            seedId = decodeURIComponent(seedId.split("/passport/").pop().split("?")[0]);
+          }
+          navigate("/passport/" + encodeURIComponent(seedId));
         },
         () => {
           // QR code not detected - this is called frequently, no action needed
