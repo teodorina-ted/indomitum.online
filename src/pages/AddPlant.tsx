@@ -152,11 +152,8 @@ const AddPlant = () => {
     if (!user) return;
     setIsSubmitting(true);
     try {
-      // Compress and convert image to base64
       let imageUrl: string | null = null;
-      if (formData.image) {
-        imageUrl = await compressImage(formData.image);
-      }
+      if (formData.image) imageUrl = await compressImage(formData.image);
 
       const { error } = await api.createSeed({
         seed_id: formData.id,
@@ -173,9 +170,8 @@ const AddPlant = () => {
       });
 
       if (error) {
-        // Duplicate ID — send user back to step 1 with a clear message
         if (error.includes("already exists")) {
-          toast.error("This ID is already in use — please scan a different bag.", { duration: 5000 });
+          toast.error("This ID is already in use — scan a different bag.", { duration: 5000 });
           setFormData(p => ({ ...p, id: "" }));
           setCurrentStep(1);
           return;
@@ -245,21 +241,30 @@ const AddPlant = () => {
               <h2 className="text-2xl font-bold mb-2">Scan Bag ID</h2>
               <p className="text-muted-foreground">Scan a QR code or enter the ID manually.</p>
             </div>
-            {!formData.id && <WebScanner onScan={handleWebScan} />}
-            {formData.id ? (
+
+            {/* Scanner — always mounted, hidden once ID is captured to prevent glitch */}
+            <div style={{ display: formData.id ? "none" : "block" }}>
+              <WebScanner onScan={handleWebScan} />
+            </div>
+
+            {/* Scanned confirmation badge */}
+            {formData.id && (
               <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/20 rounded-xl">
                 <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
                   <Check className="w-5 h-5 text-primary-foreground" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-primary">ID Scanned</p>
+                  <p className="text-sm font-medium text-primary">ID Captured</p>
                   <p className="font-mono text-sm text-foreground">{formData.id}</p>
                 </div>
                 <button onClick={() => setFormData(p => ({ ...p, id: "" }))} className="text-muted-foreground hover:text-foreground p-1">
                   <X className="w-4 h-4" />
                 </button>
               </div>
-            ) : (
+            )}
+
+            {/* Manual input — always visible below scanner */}
+            {!formData.id && (
               <>
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
@@ -269,8 +274,12 @@ const AddPlant = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-2 block">Bag ID</label>
-                  <Input placeholder="e.g., SEED-ABC123" value={formData.id}
-                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))} />
+                  <Input
+                    placeholder="e.g., SEED-ABC123"
+                    value={formData.id}
+                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && formData.id.trim() && setCurrentStep(2)}
+                  />
                 </div>
               </>
             )}
