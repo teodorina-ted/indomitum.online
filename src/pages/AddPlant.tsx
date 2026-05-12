@@ -148,19 +148,30 @@ const AddPlant = () => {
     );
   };
 
-  const handleSubmit = async () => {
-    if (!user) return;
-    setIsSubmitting(true);
-    try {
-      // Double-check duplicate
-      const { data: existing } = await api.checkSeedExists(formData.id.trim());
-      if (existing) { toast.error("This ID already exists"); return; }
+const handleIdSubmit = async (id: string) => {
+  try {
+    // 1. Check if ID exists in master seeds
+    const response = await fetch(`${API_URL}/seeds/${id}`);
+    if (!response.ok) {
+      toast.error("Invalid Seed ID. Product not found.");
+      return;
+    }
 
-      // Compress and convert image to base64
-      let imageUrl: string | null = null;
-      if (formData.image) {
-        imageUrl = await compressImage(formData.image);
-      }
+    // 2. Check if user already owns it
+    const ownershipCheck = await fetch(`${API_URL}/buyer-seeds/check/${id}/${userId}`);
+    const { exists } = await ownershipCheck.json();
+    
+    if (exists) {
+      toast.error("This seed ID already exists in your collection");
+      return; // Stop them here!
+    }
+
+    // If both pass, move to next step
+    setStep('photo');
+  } catch (error) {
+    toast.error("Lookup failed");
+  }
+};
 
       const { error } = await api.createSeed({
         seed_id: formData.id,
