@@ -337,7 +337,6 @@ app.post("/buyer/orders", auth, async (req, res) => {
       try {
         const { rows: buyerProfile } = await pool.query("SELECT full_name FROM profiles WHERE user_id = $1", [req.user.id]);
         const buyerName = buyerProfile[0]?.full_name || "A buyer";
-        // Get collector emails for the seeds
         const seedIds = items.map(i => i.seed_id);
         const { rows: collectors } = await pool.query(
           `SELECT DISTINCT u.email, p.full_name FROM users u
@@ -346,20 +345,22 @@ app.post("/buyer/orders", auth, async (req, res) => {
            WHERE s.seed_id = ANY($1)`,
           [seedIds]
         );
+        const itemsList = items.map(i => (i.name || i.seed_id) + " x" + (i.quantity || 1)).join(", ");
+        const deliveryHtml = delivery_address ? "<p><strong>Delivery:</strong> " + delivery_address + "</p>" : "";
+        const notesHtml = notes ? "<p><strong>Notes:</strong> " + notes + "</p>" : "";
         for (const collector of collectors) {
           await resend.emails.send({
             from: "Indomitum <noreply@indomitum.online>",
             to: collector.email,
-            subject: `New order from ${buyerName}`,
-            html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
-              <h2 style="color:#2d5016">🌱 New Order Received</h2>
-              <p>Hi ${collector.full_name || "Collector"},</p>
-              <p><strong>${buyerName}</strong> has sent you a seed order.</p>
-              <p><strong>Items:</strong> ${items.map(i => \`\${i.name || i.seed_id} ×\${i.quantity || 1}\`).join(", ")}</p>
-              ${delivery_address ? \`<p><strong>Delivery:</strong> \${delivery_address}</p>\` : ""}
-              ${notes ? \`<p><strong>Notes:</strong> \${notes}</p>\` : ""}
-              <p>Log in to <a href="${APP_URL}">Indomitum</a> to review and respond.</p>
-            </div>`
+            subject: "New order from " + buyerName,
+            html: "<div style='font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px'>" +
+              "<h2 style='color:#2d5016'>🌱 New Order Received</h2>" +
+              "<p>Hi " + (collector.full_name || "Collector") + ",</p>" +
+              "<p><strong>" + buyerName + "</strong> has sent you a seed order.</p>" +
+              "<p><strong>Items:</strong> " + itemsList + "</p>" +
+              deliveryHtml + notesHtml +
+              "<p>Log in to <a href='" + APP_URL + "'>Indomitum</a> to review and respond.</p>" +
+              "</div>"
           }).catch(console.error);
         }
       } catch (e) { console.error("Email notify error:", e); }
