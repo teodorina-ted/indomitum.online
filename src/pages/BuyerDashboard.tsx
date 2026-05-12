@@ -290,7 +290,7 @@ const BuyerDashboard = () => {
     const a = document.createElement("a");
     a.href = url; a.download = "my-seed-list.csv"; a.click();
     URL.revokeObjectURL(url);
-    t    setActiveTab("seeds");
+        setActiveTab("seeds");
   };
 
   const handleExportList = () => {
