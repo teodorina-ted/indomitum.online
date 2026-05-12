@@ -882,6 +882,22 @@ const BuyerDashboard = () => {
               Tracking
             </Link>
             <Link
+              to="/buyer/orders"
+              onClick={() => setSidebarOpen(false)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <ShoppingBag className="w-5 h-5" />
+              Order History
+            </Link>
+            <Link
+              to="/buyer/bin"
+              onClick={() => setSidebarOpen(false)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <Trash2 className="w-5 h-5" />
+              Removed Seeds
+            </Link>
+            <Link
               to="/buyer/settings"
               onClick={() => setSidebarOpen(false)}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
@@ -1150,59 +1166,68 @@ const BuyerDashboard = () => {
                 </DialogContent>
               </Dialog>
 
-              {/* Seeds Grid */}
+              {/* Seeds List - row style like collector dashboard */}
               {filteredSeeds.length > 0 ? (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {filteredSeeds.map((bs) => (
-                    <div 
-                      key={bs.id}
-                      className="bg-card rounded-xl border border-border overflow-hidden hover:border-primary/50 transition-colors"
-                    >
-                      {bs.seeds?.image_url ? (
-                        <img 
-                          src={bs.seeds.image_url}
-                          alt={bs.seeds.name}
-                          className="w-full h-40 object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-40 bg-muted flex items-center justify-center">
-                          <Leaf className="w-12 h-12 text-muted-foreground" />
-                        </div>
-                      )}
-                      <div className="p-4">
-                        <h3 className="font-semibold text-foreground mb-1">{bs.seeds?.name}</h3>
-                        <p className="text-xs font-mono text-muted-foreground mb-3">{bs.seeds?.seed_id}</p>
-                        
-                        <div className="space-y-1.5 text-sm">
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <MapPin className="w-3.5 h-3.5" />
-                            <span>{bs.seeds?.city && bs.seeds?.country ? `${bs.seeds.city}, ${bs.seeds.country}` : "—"}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Calendar className="w-3.5 h-3.5" />
-                            <span>Collected: {bs.seeds?.created_at ? new Date(bs.seeds.created_at).toLocaleDateString() : "—"}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Package className="w-3.5 h-3.5" />
-                            <span>Qty: {bs.quantity}</span>
-                          </div>
-                        </div>
-
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full mt-4"
-                          onClick={() => {
-                            setCurrentPassport(bs.seeds);
-                            setPassportOpen(true);
-                          }}
-                        >
-                          <ExternalLink className="w-3.5 h-3.5 mr-2" />
-                          View Passport
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/50">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plant</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden sm:table-cell">ID</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden md:table-cell">Origin</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Qty</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredSeeds.map((bs) => (
+                        <tr key={bs.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              {bs.seeds?.image_url ? (
+                                <img src={bs.seeds.image_url} alt={bs.seeds?.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                              ) : (
+                                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                                  <Leaf className="w-5 h-5 text-muted-foreground" />
+                                </div>
+                              )}
+                              <span className="font-medium text-foreground text-sm truncate max-w-[120px]">{bs.seeds?.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden sm:table-cell">
+                            <span className="font-mono text-xs text-muted-foreground">{bs.seeds?.seed_id}</span>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-sm text-muted-foreground">
+                              {bs.seeds?.city && bs.seeds?.country ? `${bs.seeds.city}, ${bs.seeds.country}` : "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-foreground">{bs.quantity}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => toggleFavorite(bs.seeds)}
+                                className={`p-1.5 rounded-lg transition-colors ${isFavorite(bs.seeds?.seed_id) ? "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : "text-muted-foreground hover:text-yellow-500 hover:bg-muted"}`}
+                                title={isFavorite(bs.seeds?.seed_id) ? "Remove from favorites" : "Add to favorites"}
+                              >
+                                <Star className={`w-4 h-4 ${isFavorite(bs.seeds?.seed_id) ? "fill-current" : ""}`} />
+                              </button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => { setCurrentPassport(bs.seeds); setPassportOpen(true); }}
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               ) : (
                 <div className="py-12 text-center">
@@ -1244,21 +1269,64 @@ const BuyerDashboard = () => {
                 </div>
               </div>
 
-              {/* Favorites Grid */}
+              {/* Favorites List - row style */}
               {filteredFavorites.length > 0 ? (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {filteredFavorites.map((seed) => (
-                    <div 
-                      key={seed.seed_id}
-                      className="bg-card rounded-xl border border-border overflow-hidden hover:border-primary/50 transition-colors"
-                    >
-                      {seed.image_url ? (
-                        <img 
-                          src={seed.image_url}
-                          alt={seed.name}
-                          className="w-full h-40 object-cover"
-                        />
-                      ) : (
+                <div className="bg-card rounded-xl border border-border overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/50">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plant</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden sm:table-cell">ID</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden md:table-cell">Origin</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Qty</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredFavorites.map((seed) => (
+                        <tr key={seed.seed_id} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-3">
+                              {seed.image_url ? (
+                                <img src={seed.image_url} alt={seed.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                              ) : (
+                                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                                  <Leaf className="w-5 h-5 text-muted-foreground" />
+                                </div>
+                              )}
+                              <span className="font-medium text-foreground text-sm truncate max-w-[120px]">{seed.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 hidden sm:table-cell">
+                            <span className="font-mono text-xs text-muted-foreground">{seed.seed_id}</span>
+                          </td>
+                          <td className="px-4 py-3 hidden md:table-cell">
+                            <span className="text-sm text-muted-foreground">
+                              {seed.city && seed.country ? `${seed.city}, ${seed.country}` : "—"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-sm text-foreground">{seed.quantity}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button size="sm" className="h-8 px-2 text-xs" onClick={() => handleAddToMyList(seed)}>
+                                <Plus className="w-3.5 h-3.5 mr-1" />Add
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => { setCurrentPassport(seed); setPassportOpen(true); }}>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </Button>
+                              <button onClick={() => toggleFavorite(seed)} className="p-1.5 rounded-lg text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors">
+                                <Star className="w-4 h-4 fill-current" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
                         <div className="w-full h-40 bg-muted flex items-center justify-center">
                           <Leaf className="w-12 h-12 text-muted-foreground" />
                         </div>
