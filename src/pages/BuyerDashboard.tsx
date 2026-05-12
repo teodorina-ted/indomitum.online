@@ -26,6 +26,7 @@ import {
   ExternalLink,
   ScanLine,
   Plus,
+  Send,
   ShoppingBag,
   Trash2,
   Download,
@@ -45,6 +46,7 @@ import WebScanner from "@/components/WebScanner";
 import ProfileSwitcher from "@/components/ProfileSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GuidedTour, TourStep } from "@/components/GuidedTour";
+import { ShareListModal } from "@/components/ShareListModal";
 import {
   Dialog,
   DialogContent,
@@ -114,6 +116,7 @@ const BuyerDashboard = () => {
   const [favoritesSortOption, setFavoritesSortOption] = useState<"name" | "date" | "quantity">("name");
   const [selectedSeeds, setSelectedSeeds] = useState<string[]>([]);
   const [selectedFavs, setSelectedFavs] = useState<string[]>([]);
+  const [shareListOpen, setShareListOpen] = useState(false);
 
   const tourStorageKey = "indomitum_buyer_tour_completed";
   const [tourOpen, setTourOpen] = useState(false);
@@ -1156,17 +1159,19 @@ const BuyerDashboard = () => {
                     className="hidden"
                     onChange={processImportFile}
                   />
-                  <Button variant="outline" size="default" onClick={() => setActiveTab("scan")}>
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90" size="default" onClick={() => setActiveTab("scan")}>
                     <Camera className="w-4 h-4 mr-2" />
                     Scan
                   </Button>
-                  <Button variant="secondary" size="default" onClick={handleImport}>
-                    <Upload className="w-4 h-4 mr-2" />
-                    Import
+                  <Button variant="secondary" size="icon" onClick={handleImport} title="Import seeds from CSV/JSON">
+                    <Upload className="w-4 h-4" />
                   </Button>
-                  <Button variant="outline" size="default" onClick={handleExportList}>
-                    <Download className="w-4 h-4 mr-2" />
-                    Export
+                  <Button variant="outline" size="icon" onClick={handleExportList} title="Export list as CSV">
+                    <Download className="w-4 h-4" />
+                  </Button>
+                  <Button variant="default" size="default" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => setShareListOpen(true)}>
+                    <Send className="w-4 h-4 mr-2" />
+                    Send
                   </Button>
                 </div>
               </div>
@@ -1292,6 +1297,16 @@ const BuyerDashboard = () => {
                             </button>
                             <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => { setCurrentPassport(bs.seeds); setPassportOpen(true); }}>
                               <ExternalLink className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={async () => {
+                                const { error } = await api.removeBuyerSeed(bs.id);
+                                if (!error) {
+                                  setBuyerSeeds(prev => prev.filter(s => s.id !== bs.id));
+                                  toast.success("Removed from your list");
+                                }
+                              }}>
+                              <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div></td>
                         </tr>
@@ -1533,6 +1548,12 @@ const BuyerDashboard = () => {
         </DialogContent>
       </Dialog>
 
+      <ShareListModal
+        open={shareListOpen}
+        onOpenChange={setShareListOpen}
+        seeds={buyerSeeds.map(bs => ({ seed_id: bs.seeds?.seed_id || "", name: bs.seeds?.name || "", quantity: bs.quantity || 1 }))}
+        onOrderSent={() => { setShareListOpen(false); toast.success("Order sent!"); }}
+      />
       <GuidedTour
         storageKey={tourStorageKey}
         open={tourOpen}

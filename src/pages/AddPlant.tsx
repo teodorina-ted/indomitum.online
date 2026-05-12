@@ -74,7 +74,12 @@ const AddPlant = () => {
   const validateDuplicateId = async (id: string): Promise<boolean> => {
     try {
       const { data } = await api.checkSeedExists(id.trim());
-      if (data) { toast.error("This ID is already registered! Use a different one."); return false; }
+      if (data) {
+        toast.error("This ID is already registered! Use a different ID.");
+        setFormData(p => ({ ...p, id: "" }));
+        setCurrentStep(1);
+        return false;
+      }
       return true;
     } catch { return true; }
   };
@@ -272,34 +277,27 @@ const AddPlant = () => {
               <h2 className="text-2xl font-bold mb-2">Plant Photo</h2>
               <p className="text-muted-foreground">Add a photo of your plant (optional).</p>
             </div>
-            {formData.imagePreview && (
-              <img src={formData.imagePreview} alt="Preview" className="w-full rounded-2xl max-h-64 object-cover" />
-            )}
-            <div className="flex gap-3">
-              {isTouchDevice() && isNative ? (
-                <>
-                  <Button variant="outline" className="flex-1" onClick={handleNativePhoto}>
-                    <Camera className="w-4 h-4 mr-2" /> Take Photo
-                  </Button>
-                  <Button variant="outline" className="flex-1" onClick={handleNativeGallery}>
-                    <Upload className="w-4 h-4 mr-2" /> Gallery
-                  </Button>
-                </>
-              ) : isTouchDevice() ? (
-                <label className="block w-full">
-                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
-                  <Button variant="outline" className="w-full" asChild>
-                    <span><Camera className="w-4 h-4 mr-2" /> Take Photo</span>
-                  </Button>
-                </label>
-              ) : null}
-              <label className="block flex-1">
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                <Button variant="outline" className="w-full" asChild>
-                  <span><Upload className="w-4 h-4 mr-2" /> Upload Image</span>
-                </Button>
-              </label>
-            </div>
+            <label className="block w-full cursor-pointer">
+              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+              {formData.imagePreview ? (
+                <div className="relative w-full rounded-2xl overflow-hidden border-2 border-primary">
+                  <img src={formData.imagePreview} alt="Preview" className="w-full max-h-64 object-cover" />
+                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                    <p className="text-white font-medium text-sm bg-black/50 px-3 py-1 rounded-full">Tap to change</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full aspect-video max-h-64 rounded-2xl border-2 border-dashed border-border bg-muted/20 flex flex-col items-center justify-center gap-3 hover:border-primary/50 hover:bg-muted/30 transition-all">
+                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                    <Camera className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <div className="text-center">
+                    <p className="font-medium text-foreground">Add a Photo</p>
+                    <p className="text-sm text-muted-foreground mt-1">Take a photo or choose from gallery</p>
+                  </div>
+                </div>
+              )}
+            </label>
           </div>
         )}
 

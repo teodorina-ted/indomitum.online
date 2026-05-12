@@ -159,6 +159,7 @@ export const api = {
   // File upload
 
   // Buyer orders
+  removeBuyerSeed: (id: string) => request(`/buyer-seeds/${id}`, { method: "DELETE" }),
   getBuyerOrders: () => request<any[]>("/buyer/orders"),
   createBuyerOrder: (data: { items: any[]; notes?: string; delivery_address?: string }) =>
     request("/buyer/orders", { method: "POST", body: JSON.stringify(data) }),
