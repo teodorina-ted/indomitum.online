@@ -245,7 +245,17 @@ const BuyerDashboard = () => {
 
   const handleWebScan = async (result: string) => {
     setShowWebScanner(false);
-    await lookupSeed(result);
+    // Extract seed ID from passport URL if scanned from QR
+    let seedId = result.trim();
+    if (seedId.includes("/passport/")) {
+      seedId = decodeURIComponent(seedId.split("/passport/").pop()?.split("?")[0] || seedId);
+    } else if (seedId.startsWith("http")) {
+      try {
+        const parts = new URL(seedId).pathname.split("/").filter(Boolean);
+        seedId = parts[parts.length - 1] || seedId;
+      } catch {}
+    }
+    await lookupSeed(seedId);
   };
 
   const handleAddToMyList = async (seed: SeedPassport) => {
