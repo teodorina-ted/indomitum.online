@@ -24,6 +24,8 @@ import {
   MapPin,
   ExternalLink,
   ScanLine,
+  ShoppingBag,
+  Trash2,
   Download,
   Upload,
   Heart,
@@ -837,6 +839,22 @@ const BuyerDashboard = () => {
               Tracking
             </Link>
             <Link
+              to="/buyer/orders"
+              onClick={() => setSidebarOpen(false)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <ShoppingBag className="w-5 h-5" />
+              Order History
+            </Link>
+            <Link
+              to="/buyer/bin"
+              onClick={() => setSidebarOpen(false)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <Trash2 className="w-5 h-5" />
+              Removed Seeds
+            </Link>
+            <Link
               to="/buyer/settings"
               onClick={() => setSidebarOpen(false)}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
@@ -922,38 +940,7 @@ const BuyerDashboard = () => {
               </div>
 
               <div className="space-y-4">
-                {showWebScanner ? (
-                  <div className="space-y-4">
-                    <WebScanner onScan={handleWebScan} />
-                    <Button
-                      variant="outline"
-                      className="w-full max-w-xs mx-auto block"
-                      onClick={() => setShowWebScanner(false)}
-                    >
-                      Cancel Scanning
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="aspect-square max-w-xs mx-auto rounded-2xl border-2 border-dashed border-border bg-muted/30 flex flex-col items-center justify-center p-8">
-                    <ScanLine className="w-16 h-16 text-primary mb-4" />
-                    <Button onClick={handleNativeScan} size="lg" disabled={isScanning}>
-                      {isScanning ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Scanning...
-                        </>
-                      ) : (
-                        <>
-                          <Camera className="w-4 h-4 mr-2" />
-                          Scan Barcode
-                        </>
-                      )}
-                    </Button>
-                    <span className="text-xs text-muted-foreground mt-2">
-                      Supports QR, Code128, EAN-13 & more
-                    </span>
-                  </div>
-                )}
+                <WebScanner onScan={handleWebScan} />
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -1191,13 +1178,19 @@ const BuyerDashboard = () => {
                   ))}
                 </div>
               ) : (
-                <div className="py-12 text-center">
-                  <Package className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
+                <div className="py-12 text-center space-y-4">
+                  <Package className="w-12 h-12 text-muted-foreground/50 mx-auto" />
                   <p className="text-muted-foreground">
                     {buyerSeeds.length === 0 
-                      ? "No seeds assigned to you yet. Contact your seller!" 
+                      ? "No seeds in your collection yet." 
                       : "No seeds found"}
                   </p>
+                  {buyerSeeds.length === 0 && (
+                    <Button onClick={() => setActiveTab("scan")} size="lg" className="gap-2">
+                      <Camera className="w-4 h-4" />
+                      Scan a Seed Bag
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
