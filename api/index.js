@@ -309,28 +309,49 @@ app.post("/buyer/orders", auth, async (req, res) => {
   if (!items?.length) return res.status(400).json({ error: "No items in order" });
   try {
     await pool.query("BEGIN");
-    const { rows: orderRows } = await pool.query(
-      `INSERT INTO orders (buyer_id, status, notes, delivery_address, created_at)
-       VALUES ($1, 'pending', $2, $3, now()) RETURNING *`,
-      [req.user.id, notes || null, delivery_address || null]
-    );
-    const order = orderRows[0];
 
+    // Group items by collector (added_by) so each collector gets their own order
+    const collectorMap = {};
     for (const item of items) {
-      const { rows: seedRows } = await pool.query("SELECT id FROM seeds WHERE seed_id = $1", [item.seed_id]);
+      const { rows: seedRows } = await pool.query(
+        "SELECT id, seed_id, name, added_by FROM seeds WHERE seed_id = $1",
+        [item.seed_id]
+      );
       if (seedRows.length) {
-        await pool.query(
-          "INSERT INTO order_items (order_id, seed_id, quantity) VALUES ($1, $2, $3)",
-          [order.id, seedRows[0].id, item.quantity || 1]
-        );
+        const seed = seedRows[0];
+        const collectorId = seed.added_by;
+        if (!collectorMap[collectorId]) collectorMap[collectorId] = [];
+        collectorMap[collectorId].push({ ...item, dbId: seed.id, name: seed.name });
       }
     }
 
-    await pool.query(
-      "INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, 'pending', $2)",
-      [order.id, req.user.id]
-    );
+    const createdOrders = [];
+
+    // Create one order per collector
+    for (const [collectorId, collectorItems] of Object.entries(collectorMap)) {
+      const { rows: orderRows } = await pool.query(
+        `INSERT INTO orders (buyer_id, collector_id, status, notes, delivery_address, created_at)
+         VALUES ($1, $2, 'pending', $3, $4, now()) RETURNING *`,
+        [req.user.id, collectorId, notes || null, delivery_address || null]
+      );
+      const order = orderRows[0];
+      createdOrders.push(order);
+
+      for (const item of collectorItems) {
+        await pool.query(
+          "INSERT INTO order_items (order_id, seed_id, quantity) VALUES ($1, $2, $3)",
+          [order.id, item.dbId, item.quantity || 1]
+        );
+      }
+
+      await pool.query(
+        "INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, 'pending', $2)",
+        [order.id, req.user.id]
+      );
+    }
+
     await pool.query("COMMIT");
+    const order = createdOrders[0]; // for compatibility
 
     // Notify collector via email if Resend is configured
     if (resend) {
