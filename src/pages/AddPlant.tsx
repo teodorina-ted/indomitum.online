@@ -19,6 +19,31 @@ const steps = [
   { number: 4, title: "Details", icon: FileText },
 ];
 
+
+// Compress image to max 800px and ~500KB before base64
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 800;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+        else { width = Math.round(width * MAX / height); height = MAX; }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", 0.75));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+};
+
 const isTouchDevice = () =>
   /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
   navigator.maxTouchPoints > 1;
@@ -126,15 +151,10 @@ const AddPlant = () => {
       const { data: existing } = await api.checkSeedExists(formData.id.trim());
       if (existing) { toast.error("This ID already exists"); return; }
 
-      // Convert image to base64 (no external upload needed)
+      // Compress and convert image to base64
       let imageUrl: string | null = null;
       if (formData.image) {
-        imageUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(formData.image!);
-        });
+        imageUrl = await compressImage(formData.image);
       }
 
       const { error } = await api.createSeed({
