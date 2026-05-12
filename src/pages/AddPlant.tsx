@@ -19,8 +19,6 @@ const steps = [
   { number: 4, title: "Details", icon: FileText },
 ];
 
-
-// Compress image to max 800px and ~500KB before base64
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -44,14 +42,10 @@ const compressImage = (file: File): Promise<string> => {
   });
 };
 
-const isTouchDevice = () =>
-  /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-  navigator.maxTouchPoints > 1;
-
 const AddPlant = () => {
   const navigate = useNavigate();
   const { user, isLoading: authLoading, isCollector } = useAuth();
-  const { isNative, takePhoto, pickFromGallery } = useNativeCamera();
+  const { takePhoto, pickFromGallery } = useNativeCamera();
 
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,9 +69,7 @@ const AddPlant = () => {
     try {
       const { data } = await api.checkSeedExists(id.trim());
       if (data) {
-        toast.error("This ID is already registered! Use a different ID.");
-        setFormData(p => ({ ...p, id: "" }));
-        setCurrentStep(1);
+        toast.error("This ID is already registered in your collection!");
         return false;
       }
       return true;
@@ -89,26 +81,13 @@ const AddPlant = () => {
     if (isValid) {
       setFormData(p => ({ ...p, id: result }));
       toast.success("Code scanned!");
+      setCurrentStep(2); // Auto-advance on successful scan
     }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) setFormData(p => ({ ...p, image: file, imagePreview: URL.createObjectURL(file) }));
-  };
-
-  const handleNativePhoto = async () => {
-    const result = await takePhoto();
-    if (result.file && result.dataUrl) {
-      setFormData(p => ({ ...p, image: result.file, imagePreview: result.dataUrl }));
-    }
-  };
-
-  const handleNativeGallery = async () => {
-    const result = await pickFromGallery();
-    if (result.file && result.dataUrl) {
-      setFormData(p => ({ ...p, image: result.file, imagePreview: result.dataUrl }));
-    }
   };
 
   const handleGetLocation = () => {
@@ -118,83 +97,62 @@ const AddPlant = () => {
       async (pos) => {
         const lat = pos.coords.latitude.toFixed(6);
         const lng = pos.coords.longitude.toFixed(6);
-        setFormData(p => ({ ...p, location: { ...p.location, lat, lng } }));
-        // Reverse geocode to fill address fields
         try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
-            { headers: { "Accept-Language": "en" } }
-          );
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`, { headers: { "Accept-Language": "en" } });
           const data = await res.json();
           const addr = data.address || {};
           setFormData(p => ({
             ...p,
             location: {
-              ...p.location,
-              lat,
-              lng,
+              ...p.location, lat, lng,
               street: [addr.road, addr.house_number].filter(Boolean).join(" ") || "",
-              city: addr.city || addr.town || addr.village || addr.municipality || "",
+              city: addr.city || addr.town || addr.village || "",
               zip: addr.postcode || "",
               country: addr.country || "",
             }
           }));
-        } catch {}
+          toast.success("Location captured!");
+        } catch { toast.error("Location captured, but address lookup failed."); }
         setGettingLocation(false);
-        toast.success("Location captured!");
       },
       () => { setGettingLocation(false); toast.error("Could not get location"); },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 10000 }
     );
   };
 
-/*  const handleSubmit = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!user) return;
     setIsSubmitting(true);
+
     try {
-      // Double-check duplicate
-      const { data: existing } = await api.checkSeedExists(formData.id.trim());
-      if (existing) { toast.error("This ID already exists"); return; }
-
-      // Compress and convert image to base64
-      let imageUrl: string | null = null;
+      let finalImageUrl = "";
       if (formData.image) {
-        imageUrl = await compressImage(formData.image);
+        const base64 = await compressImage(formData.image);
+        // Upload logic depends on your api.ts, assuming it handles base64 or you have an upload endpoint
+        const uploadRes = await api.uploadImage(base64); 
+        finalImageUrl = uploadRes.url;
       }
-       */
-// 1. Ensure the function is marked as 'async'
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setIsSubmitting(true);
 
-  try {
-    // 2. This is the 'await' that caused the build error
-    const { data, error } = await api.createSeed({
-      seed_id: formData.id,
-      name: formData.name,
-      quantity: parseInt(formData.quantity),
-      notes: formData.notes,
-      image_url: formData.image_url,
-    });
+      const { error } = await api.createSeed({
+        seed_id: formData.id.trim(),
+        name: formData.name,
+        quantity: parseInt(formData.quantity),
+        notes: formData.notes,
+        image_url: finalImageUrl,
+        location: formData.location
+      });
 
-    if (error) {
-      // Check if the error is a duplicate ID from the DB
-      if (error.includes("already exists")) {
-        toast.error("This seed ID is already in your collection");
-      } else {
-        toast.error(error);
-      }
-      return;
+      if (error) throw new Error(error);
+
+      toast.success("Plant added successfully!");
+      navigate("/buyer-dashboard");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add plant");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    toast.success("Plant added successfully!");
-    navigate("/buyer-dashboard");
-  } catch (err: any) {
-    toast.error(err.message || "An unexpected error occurred");
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+  };
 
   const canProceed = () => {
     if (currentStep === 1) return formData.id.trim() !== "";
@@ -202,188 +160,86 @@ const handleSubmit = async (e: React.FormEvent) => {
     return true;
   };
 
-  if (authLoading) return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-    </div>
-  );
+  if (authLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border px-4 py-4">
+    <div className="min-h-screen bg-background pb-20">
+      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b px-4 py-4">
         <div className="max-w-2xl mx-auto flex items-center gap-4">
-          <Link to="/dashboard">
-            <Button variant="ghost" size="icon"><ArrowLeft className="w-5 h-5" /></Button>
-          </Link>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Leaf className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <h1 className="text-lg font-semibold">Add New Plant</h1>
-          </div>
+          <Link to="/buyer-dashboard"><Button variant="ghost" size="icon"><ArrowLeft /></Button></Link>
+          <h1 className="text-lg font-semibold">Add New Plant</h1>
         </div>
       </header>
 
-      <div className="border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            {steps.map((step, index) => (
-              <div key={step.number} className="flex items-center">
-                <div className="flex flex-col items-center">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${currentStep >= step.number ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                    {currentStep > step.number ? <Check className="w-5 h-5" /> : <step.icon className="w-5 h-5" />}
-                  </div>
-                  <span className="text-xs mt-1 font-medium">{step.title}</span>
-                </div>
-                {index < steps.length - 1 && <div className="h-0.5 w-12 sm:w-20 mx-2 bg-border" />}
+      <div className="max-w-2xl mx-auto px-4 py-4 border-b">
+        <div className="flex items-center justify-between">
+          {steps.map((step) => (
+            <div key={step.number} className="flex flex-col items-center">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${currentStep >= step.number ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+                <step.icon className="w-5 h-5" />
               </div>
-            ))}
-          </div>
+              <span className="text-[10px] mt-1 uppercase tracking-wider">{step.title}</span>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <main className="max-w-2xl mx-auto px-4 py-8">
         {currentStep === 1 && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold mb-2">Scan Bag ID</h2>
-              <p className="text-muted-foreground">Scan a QR code or enter the ID manually.</p>
+            <WebScanner onScan={handleWebScan} />
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Manual ID Entry</label>
+              <Input placeholder="Enter Bag ID" value={formData.id} onChange={e => setFormData(p => ({ ...p, id: e.target.value }))} />
             </div>
-            {!formData.id && <WebScanner onScan={handleWebScan} />}
-            {formData.id ? (
-              <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/20 rounded-xl">
-                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                  <Check className="w-5 h-5 text-primary-foreground" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-primary">ID Scanned</p>
-                  <p className="font-mono text-sm text-foreground">{formData.id}</p>
-                </div>
-                <button onClick={() => setFormData(p => ({ ...p, id: "" }))} className="text-muted-foreground hover:text-foreground p-1">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">or enter manually</span>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Bag ID</label>
-                  <Input placeholder="e.g., SEED-ABC123" value={formData.id}
-                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))} />
-                </div>
-              </>
-            )}
           </div>
         )}
 
         {currentStep === 2 && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold mb-2">Plant Photo</h2>
-              <p className="text-muted-foreground">Add a photo of your plant (optional).</p>
-            </div>
-            <label className="block w-full cursor-pointer">
-              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+            <div className="aspect-video bg-muted rounded-xl flex items-center justify-center overflow-hidden border-2 border-dashed">
               {formData.imagePreview ? (
-                <div className="relative w-full rounded-2xl overflow-hidden border-2 border-primary">
-                  <img src={formData.imagePreview} alt="Preview" className="w-full max-h-64 object-cover" />
-                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                    <p className="text-white font-medium text-sm bg-black/50 px-3 py-1 rounded-full">Tap to change</p>
-                  </div>
-                </div>
+                <img src={formData.imagePreview} className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full aspect-video max-h-64 rounded-2xl border-2 border-dashed border-border bg-muted/20 flex flex-col items-center justify-center gap-3 hover:border-primary/50 hover:bg-muted/30 transition-all">
-                  <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                    <Camera className="w-8 h-8 text-muted-foreground" />
-                  </div>
-                  <div className="text-center">
-                    <p className="font-medium text-foreground">Add a Photo</p>
-                    <p className="text-sm text-muted-foreground mt-1">Take a photo or choose from gallery</p>
-                  </div>
-                </div>
+                <Camera className="w-12 h-12 text-muted-foreground" />
               )}
-            </label>
+            </div>
+            <Input type="file" accept="image/*" onChange={handleImageUpload} />
           </div>
         )}
 
         {currentStep === 3 && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold mb-2">Location</h2>
-              <p className="text-muted-foreground">Capture where the plant was collected.</p>
-            </div>
+          <div className="space-y-4">
             <Button onClick={handleGetLocation} className="w-full" disabled={gettingLocation}>
-              {gettingLocation ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Getting Location...</> : <><MapPin className="w-4 h-4 mr-2" /> Get Current Location</>}
+              {gettingLocation ? <Loader2 className="animate-spin mr-2" /> : <MapPin className="mr-2" />} Get Location
             </Button>
-            {formData.location.lat && (
-              <p className="text-sm text-center text-muted-foreground">
-                📍 {formData.location.lat}, {formData.location.lng}
-              </p>
-            )}
-            <Input placeholder="Street address" value={formData.location.street}
-              onChange={e => setFormData(p => ({ ...p, location: { ...p.location, street: e.target.value } }))} />
-            <div className="flex gap-3">
-              <Input placeholder="City" value={formData.location.city}
-                onChange={e => setFormData(p => ({ ...p, location: { ...p.location, city: e.target.value } }))} />
-              <Input placeholder="ZIP" value={formData.location.zip}
-                onChange={e => setFormData(p => ({ ...p, location: { ...p.location, zip: e.target.value } }))} />
-            </div>
-            <Input placeholder="Country" value={formData.location.country}
-              onChange={e => setFormData(p => ({ ...p, location: { ...p.location, country: e.target.value } }))} />
+            <Input placeholder="City" value={formData.location.city} onChange={e => setFormData(p => ({ ...p, location: { ...p.location, city: e.target.value } }))} />
+            <Input placeholder="Country" value={formData.location.country} onChange={e => setFormData(p => ({ ...p, location: { ...p.location, country: e.target.value } }))} />
           </div>
         )}
 
         {currentStep === 4 && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold mb-2">Final Details</h2>
-              <p className="text-muted-foreground">Almost done!</p>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Plant Name *</label>
-              <Input value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Quantity *</label>
-              <Input type="number" min="1" value={formData.quantity}
-                onChange={e => setFormData(p => ({ ...p, quantity: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Notes</label>
-              <Textarea rows={4} value={formData.notes}
-                onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} />
-            </div>
+          <div className="space-y-4">
+            <Input placeholder="Plant Name" value={formData.name} onChange={e => setFormData(p => ({ ...p, name: e.target.value }))} />
+            <Input type="number" placeholder="Quantity" value={formData.quantity} onChange={e => setFormData(p => ({ ...p, quantity: e.target.value }))} />
+            <Textarea placeholder="Notes" value={formData.notes} onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))} />
           </div>
         )}
 
         <div className="flex gap-3 mt-8">
-          {currentStep > 1 && (
-            <Button variant="outline" className="flex-1"
-              onClick={() => setCurrentStep((currentStep - 1) as Step)}>Back</Button>
-          )}
+          {currentStep > 1 && <Button variant="outline" className="flex-1" onClick={() => setCurrentStep(prev => (prev - 1) as Step)}>Back</Button>}
           {currentStep < 4 ? (
-            <Button className="flex-1" disabled={!canProceed()}
-              onClick={async () => {
-                if (currentStep === 1) {
-                  const valid = await validateDuplicateId(formData.id);
-                  if (!valid) return;
-                }
-                setCurrentStep((currentStep + 1) as Step);
-              }}>
-              Continue
-            </Button>
+            <Button className="flex-1" disabled={!canProceed()} onClick={async () => {
+              if (currentStep === 1 && !(await validateDuplicateId(formData.id))) return;
+              setCurrentStep(prev => (prev + 1) as Step);
+            }}>Continue</Button>
           ) : (
-            <Button className="flex-1" disabled={!canProceed() || isSubmitting} onClick={handleSubmit}>
-              {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</> : <><Check className="w-4 h-4 mr-2" /> Submit Plant</>}
+            <Button className="flex-1" disabled={isSubmitting} onClick={handleSubmit}>
+              {isSubmitting ? <Loader2 className="animate-spin" /> : "Submit Plant"}
             </Button>
           )}
         </div>
-      </div>
+      </main>
     </div>
   );
 };
