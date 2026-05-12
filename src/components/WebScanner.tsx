@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Html5Qrcode } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
 import { Camera, StopCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -10,112 +10,136 @@ interface WebScannerProps {
   autoStart?: boolean;
 }
 
-const isMobile = () =>
-  /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-  navigator.maxTouchPoints > 1;
-
-const extractId = (raw: string): string => {
-  try {
-    if (raw.includes("/passport/")) return decodeURIComponent(raw.split("/passport/").pop()!.split("?")[0]);
-    if (raw.startsWith("http")) {
-      const parts = new URL(raw).pathname.split("/").filter(Boolean);
-      return parts[parts.length - 1] || raw;
-    }
-  } catch {}
-  return raw.trim();
-};
-
-const SCANNER_ID = "html5qr-scanner-region";
-
-const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
-  const [scanning, setScanning] = useState(false);
-  const [starting, setStarting] = useState(false);
+const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerProps) => {
+  const [isScanning, setIsScanning] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
-  const mountedRef = useRef(true);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const containerIdRef = useRef(`scanner-${Math.random().toString(36).substr(2, 9)}`);
 
+  // Auto-start on mount
   useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; stopScanner(); };
+    if (autoStart) {
+      startScanner();
+    }
   }, []);
 
-  const stopScanner = async () => {
+  const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
       try {
-        if (scannerRef.current.isScanning) await scannerRef.current.stop();
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
         await scannerRef.current.clear();
-      } catch {}
+      } catch (error) {
+        console.error("Error stopping scanner:", error);
+      }
       scannerRef.current = null;
     }
-    if (mountedRef.current) setScanning(false);
-  };
+    setIsScanning(false);
+  }, []);
 
-  const startScanner = async () => {
-    setStarting(true);
+  const startScanner = useCallback(async () => {
+    if (!containerRef.current || isScanning) return;
+
+    setIsStarting(true);
+
     try {
+      // Clean up any existing scanner
       await stopScanner();
-      const scanner = new Html5Qrcode(SCANNER_ID, {
+
+      // Create new scanner instance
+      scannerRef.current = new Html5Qrcode(containerIdRef.current, {
         verbose: false,
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.DATA_MATRIX,
-        ],
       });
-      scannerRef.current = scanner;
-      await scanner.start(
+
+      // Request camera and start scanning
+      await scannerRef.current.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
-        (decoded) => { stopScanner(); onScan(extractId(decoded)); },
-        () => {}
+        {
+          fps: 10,
+          qrbox: { width: 200, height: 200 },
+          aspectRatio: 1,
+        },
+        (decodedText) => {
+          // On successful scan - stop first, then notify parent
+          stopScanner();
+          onScan(decodedText);
+        },
+        () => {
+          // QR code not detected - called frequently, no action needed
+        }
       );
-      if (mountedRef.current) setScanning(true);
-    } catch (err: any) {
-      const msg = err?.message || "";
-      if (msg.includes("Permission") || msg.includes("NotAllowed")) {
-        toast.error("Camera permission denied. Please allow camera access.");
-      } else if (msg.includes("NotFound")) {
-        toast.error("No camera found on this device.");
-      } else {
-        toast.error("Could not start camera. Try again.");
+
+      setIsScanning(true);
+
+      // iOS Safari fix: ensure video has playsinline and muted
+      const videoElement = containerRef.current?.querySelector("video");
+      if (videoElement) {
+        videoElement.setAttribute("playsinline", "true");
+        videoElement.setAttribute("muted", "true");
+        videoElement.playsInline = true;
+        videoElement.muted = true;
+      }
+    } catch (error) {
+      console.error("Scanner error:", error);
+      if (error instanceof Error) {
+        if (error.message.includes("Permission")) {
+          toast.error("Camera permission denied. Please allow camera access.");
+        } else {
+          toast.error("Failed to start scanner. Try again.");
+        }
       }
     } finally {
-      if (mountedRef.current) setStarting(false);
+      setIsStarting(false);
     }
-  };
+  }, [isScanning, onScan, stopScanner]);
 
-  // Desktop: show nothing, manual entry only
-  if (!isMobile()) return null;
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopScanner();
+    };
+  }, [stopScanner]);
 
   return (
     <div className={className}>
-      {/* Video container - only visible when scanning */}
+      {/* Scanner Container */}
       <div
-        id={SCANNER_ID}
-        className={`w-full max-w-xs mx-auto rounded-2xl overflow-hidden bg-black transition-all duration-300 ${
-          scanning ? "h-64 mb-3" : "h-0"
-        }`}
+        id={containerIdRef.current}
+        ref={containerRef}
+        className="w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden bg-muted/30 border-2 border-dashed border-border"
+        style={{ minHeight: isScanning ? "250px" : "0" }}
       />
 
-      {scanning && (
-        <p className="text-center text-sm text-muted-foreground mb-3">
-          Point at QR code or barcode on the bag
-        </p>
-      )}
+      {/* Controls */}
+      <div className="flex justify-center mt-4">
+        {!isScanning ? (
+          <Button onClick={startScanner} size="lg" disabled={isStarting}>
+            {isStarting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Starting...
+              </>
+            ) : (
+              <>
+                <Camera className="w-4 h-4 mr-2" />
+                Scan with Camera
+              </>
+            )}
+          </Button>
+        ) : (
+          <Button onClick={stopScanner} variant="destructive" size="lg">
+            <StopCircle className="w-4 h-4 mr-2" />
+            Stop Scanner
+          </Button>
+        )}
+      </div>
 
-      {/* Single clean button */}
-      {!scanning ? (
-        <Button onClick={startScanner} size="lg" className="w-full" disabled={starting}>
-          {starting
-            ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Starting...</>
-            : <><Camera className="w-4 h-4 mr-2" /> Scan with Camera</>
-          }
-        </Button>
-      ) : (
-        <Button onClick={stopScanner} size="lg" variant="outline" className="w-full">
-          <StopCircle className="w-4 h-4 mr-2" /> Stop Scanning
-        </Button>
+      {isScanning && (
+        <p className="text-xs text-muted-foreground text-center mt-2">
+          Point camera at QR code or barcode
+        </p>
       )}
     </div>
   );
