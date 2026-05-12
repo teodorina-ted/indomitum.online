@@ -1,75 +1,126 @@
-# Indomitum — Seed Collection CRM
+# 🌱 Indomitum
 
-A platform for professional seed collectors to document, track, and share plant specimens with buyers.
+> *"Indomitum"* — Latin for untamed, wild, unconquered. Just like the plants we track.
+
+A seed collection CRM built for the field. Scan, track, and share plant passports — from the dirt to the database.
+
+---
+
+## What it does
+
+**For Collectors** (the people knee-deep in soil):
+- Add plants by scanning their bag QR/barcode in the field
+- Attach GPS coordinates, photos, and notes
+- Generate printable barcodes and QR codes for each bag
+- Manage orders from buyers
+- Track everything in a clean dashboard
+
+**For Buyers** (the people who want the plants):
+- Scan a QR code to view a plant's full passport
+- Save seeds to a wishlist
+- Place orders and track shipping
+
+---
 
 ## Stack
 
-- **Frontend**: React 18 + Vite + TypeScript + Tailwind CSS + shadcn/ui
-- **Backend**: Node.js + Express + PostgreSQL + JWT auth
-- **Storage**: Cloudflare R2 (or local disk fallback)
-- **Infra**: Docker + Railway + Nginx
+| Layer | Tech |
+|-------|------|
+| Frontend | React 18 + TypeScript + Vite + Tailwind + shadcn/ui |
+| Backend | Node.js + Express |
+| Database | PostgreSQL |
+| Auth | JWT |
+| Email | Resend |
+| Infra | Docker + Railway |
+| DNS | Cloudflare |
+| QR Scanning | Html5Qrcode + native BarcodeDetector API |
 
-## Quick Start (Local)
+---
+
+## Getting started
+
+### Prerequisites
+- Node.js 20+
+- PostgreSQL
+- A Resend account (for emails)
+
+### Local setup
 
 ```bash
-# 1. Clone
-git clone https://github.com/teodorina-ted/indomitum.online.git
-cd indomitum.online-main
+git clone https://github.com/teodorina-ted/indomitum.online
+cd indomitum.online
 
-# 2. Install frontend deps
+# Frontend
 npm install
-
-# 3. Copy and fill env
 cp .env.example .env
-# Edit .env with your DATABASE_URL, JWT_SECRET, etc.
-
-# 4. Start local DB (or connect to Railway/Supabase Postgres)
-# Run db/init.sql to create tables from scratch, OR
-# Run db/migrate_v2.sql if upgrading an existing database
-
-# 5. Start API
-cd api && npm install && node index.js
-
-# 6. Start frontend (in another terminal, from root)
+# Set VITE_API_URL=http://localhost:3000
 npm run dev
+
+# Backend
+cd api
+npm install
+cp .env.example .env
+# Set DATABASE_URL, JWT_SECRET, RESEND_API_KEY
+node index.js
 ```
 
-## Environment Variables
+### Environment variables
 
-| Variable | Required | Description |
-|---|---|---|
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `JWT_SECRET` | ✅ | Generate: `openssl rand -hex 64` |
-| `CORS_ORIGIN` | ✅ | Comma-separated allowed origins e.g. `https://indomitum.online` |
-| `VITE_API_URL` | ✅ | Backend URL e.g. `/api` or `https://api.indomitum.online` |
-| `R2_ACCESS_KEY_ID` | ⬜ | Cloudflare R2 key (falls back to local disk) |
-| `R2_SECRET_ACCESS_KEY` | ⬜ | Cloudflare R2 secret |
-| `R2_ENDPOINT` | ⬜ | R2 endpoint URL |
-| `R2_BUCKET` | ⬜ | R2 bucket name |
-| `R2_PUBLIC_URL` | ⬜ | Public base URL for R2 assets |
+**Frontend (`.env`)**
+```
+VITE_API_URL=https://indomitum.up.railway.app
+```
+
+**Backend (`api/.env`)**
+```
+DATABASE_URL=postgresql://...
+JWT_SECRET=your-secret-here
+RESEND_API_KEY=re_...
+APP_URL=https://indomitum.online
+PORT=3000
+CORS_ORIGIN=https://indomitum.online,https://indomitum-online.up.railway.app
+```
+
+---
 
 ## Roles
 
-- **Collector** — add seeds, manage collection, handle orders, ship
-- **Buyer** — scan QR codes, view passports, place orders, track shipments  
-- **Admin** — full access to everything
+| Role | Can do |
+|------|--------|
+| `collector` | Add/manage seeds, handle orders, generate QR codes |
+| `buyer` | Scan QR codes, view passports, save seeds, place orders |
+| `admin` | Everything |
 
-## Organization / Team Setup
+---
 
-When a collector signs up they can:
-1. **Create a new organization** (enter a company name)
-2. **Join an existing organization** (enter the org UUID from Settings)
+## Deployment
 
-Multiple collectors in the same org share visibility of all seeds.
+Deployed on [Railway](https://railway.app) with two services:
+- **front** — nginx serving the React SPA
+- **back** — Node.js API
 
-## Deploy to Railway
+Auto-deploys on push to `main`. Domain managed via Cloudflare.
 
-1. Push to GitHub
-2. Connect repo in Railway
-3. Set all environment variables above
-4. Railway auto-builds from `Dockerfile`
+---
 
-## Database
+## Features
 
-- Fresh install: run `db/init.sql`
-- Upgrading from v1: run `db/migrate_v2.sql`
+- 📱 Mobile-first PWA — installable on any device
+- 🔍 Live QR/barcode scanner (mobile) + manual entry (desktop)
+- 🗺️ GPS location capture with address lookup
+- 📸 Photo upload with base64 storage
+- 📧 Email verification on signup
+- 🌍 Multi-language support (EN, IT, ES, FR, DE)
+- 🌙 Dark mode
+- 🏷️ Printable bag labels with QR codes
+- ♻️ Recycle bin — delete and restore seeds
+
+---
+
+## License
+
+MIT — use it, fork it, plant it.
+
+---
+
+*Built with too much coffee and not enough sleep.* ☕

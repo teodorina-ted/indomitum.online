@@ -34,7 +34,7 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "10mb" }));
 
 const globalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true, legacyHeaders: false });
 app.use(globalLimiter);
@@ -325,6 +325,7 @@ app.post("/auth/login", authLimiter, validate(loginSchema), async (req, res) => 
 
     // Check email verification (skip for admin)
     const isAdmin = roleRows.some(r => r.role === "admin");
+    // email_verified: null=old account(allow), false=unverified(block), true=verified(allow)
     if (!isAdmin && user.email_verified === false) {
       return res.status(403).json({ 
         error: "Please verify your email before logging in. Check your inbox for a verification link.",
