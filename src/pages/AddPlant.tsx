@@ -85,8 +85,31 @@ const AddPlant = () => {
     if (!navigator.geolocation) { toast.error("Geolocation not supported"); return; }
     setGettingLocation(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setFormData(p => ({ ...p, location: { ...p.location, lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6) } }));
+      async (pos) => {
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        setFormData(p => ({ ...p, location: { ...p.location, lat, lng } }));
+        // Reverse geocode to fill address fields
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+            { headers: { "Accept-Language": "en" } }
+          );
+          const data = await res.json();
+          const addr = data.address || {};
+          setFormData(p => ({
+            ...p,
+            location: {
+              ...p.location,
+              lat,
+              lng,
+              street: [addr.road, addr.house_number].filter(Boolean).join(" ") || "",
+              city: addr.city || addr.town || addr.village || addr.municipality || "",
+              zip: addr.postcode || "",
+              country: addr.country || "",
+            }
+          }));
+        } catch {}
         setGettingLocation(false);
         toast.success("Location captured!");
       },
