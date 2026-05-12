@@ -260,19 +260,24 @@ const BuyerDashboard = () => {
 
   const handleAddToMyList = async (seed: SeedPassport) => {
     // Check if already in list
-    const already = buyerSeeds.some(bs => bs.seeds?.seed_id === seed.seed_id);
+    const already = buyerSeeds.some(bs => 
+      bs.seeds?.seed_id === seed.seed_id || bs.seed_id === seed.id
+    );
     if (already) {
       toast.info("Already in your list!");
+      setPassportOpen(false);
+      setActiveTab("seeds");
       return;
     }
+    // seed.id is the UUID from seeds table
     const { error } = await api.assignBuyerSeed({ seed_id: seed.id, quantity: 1 });
     if (error) {
-      toast.error("Failed to add to list");
+      console.error("assignBuyerSeed error:", error);
+      toast.error("Failed to add: " + error);
       return;
     }
     toast.success("Added to My List! ✅");
     setPassportOpen(false);
-    // Refresh list
     const { data } = await api.getBuyerSeeds();
     if (data) setBuyerSeeds(data);
     setActiveTab("seeds");
@@ -962,38 +967,7 @@ const BuyerDashboard = () => {
               </div>
 
               <div className="space-y-4">
-                {showWebScanner ? (
-                  <div className="space-y-4">
-                    <WebScanner onScan={handleWebScan} />
-                    <Button
-                      variant="outline"
-                      className="w-full max-w-xs mx-auto block"
-                      onClick={() => setShowWebScanner(false)}
-                    >
-                      Cancel Scanning
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="aspect-square max-w-xs mx-auto rounded-2xl border-2 border-dashed border-border bg-muted/30 flex flex-col items-center justify-center p-8">
-                    <ScanLine className="w-16 h-16 text-primary mb-4" />
-                    <Button onClick={handleNativeScan} size="lg" disabled={isScanning}>
-                      {isScanning ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Scanning...
-                        </>
-                      ) : (
-                        <>
-                          <Camera className="w-4 h-4 mr-2" />
-                          Scan Barcode
-                        </>
-                      )}
-                    </Button>
-                    <span className="text-xs text-muted-foreground mt-2">
-                      Supports QR, Code128, EAN-13 & more
-                    </span>
-                  </div>
-                )}
+                <WebScanner onScan={handleWebScan} />
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
