@@ -137,8 +137,6 @@ export const api = {
   getOrders: () => request<any[]>("/orders"),
   createOrder: (data: any) =>
     request("/orders", { method: "POST", body: JSON.stringify(data) }),
-  updateOrderStatus: (id: string, status: string, notes?: string) =>
-    request(`/orders/${id}/status`, { method: "PUT", body: JSON.stringify({ status, notes }) }),
   getOrderItems: (orderId: string) => request<any[]>(`/orders/${orderId}/items`),
   getOrderHistory: (orderId: string) => request<any[]>(`/orders/${orderId}/history`),
 

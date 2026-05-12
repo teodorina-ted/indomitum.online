@@ -223,12 +223,18 @@ const BuyerDashboard = () => {
     setIsScanning(false);
 
     if (error) {
-      toast.error("Failed to look up product");
+      if (error.includes("401") || error.includes("Unauthorized") || error.includes("token")) {
+        toast.error("Session expired — please log out and back in.");
+      } else if (error.includes("Network") || error.includes("fetch")) {
+        toast.error("No connection. Check your internet and try again.");
+      } else {
+        toast.error("Could not look up product. Try again.");
+      }
       return;
     }
 
     if (!data) {
-      toast.error("Product not found. Check the ID and try again.");
+      toast.error("Product not found. Make sure you scanned the right bag.");
       return;
     }
 
