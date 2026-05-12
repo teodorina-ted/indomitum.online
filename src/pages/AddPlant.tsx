@@ -148,54 +148,53 @@ const AddPlant = () => {
     );
   };
 
-const handleIdSubmit = async (id: string) => {
+/*  const handleSubmit = async () => {
+    if (!user) return;
+    setIsSubmitting(true);
+    try {
+      // Double-check duplicate
+      const { data: existing } = await api.checkSeedExists(formData.id.trim());
+      if (existing) { toast.error("This ID already exists"); return; }
+
+      // Compress and convert image to base64
+      let imageUrl: string | null = null;
+      if (formData.image) {
+        imageUrl = await compressImage(formData.image);
+      }
+       */
+// 1. Ensure the function is marked as 'async'
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setIsSubmitting(true);
+
   try {
-    // 1. Check if ID exists in master seeds
-    const response = await fetch(`${API_URL}/seeds/${id}`);
-    if (!response.ok) {
-      toast.error("Invalid Seed ID. Product not found.");
+    // 2. This is the 'await' that caused the build error
+    const { data, error } = await api.createSeed({
+      seed_id: formData.id,
+      name: formData.name,
+      quantity: parseInt(formData.quantity),
+      notes: formData.notes,
+      image_url: formData.image_url,
+    });
+
+    if (error) {
+      // Check if the error is a duplicate ID from the DB
+      if (error.includes("already exists")) {
+        toast.error("This seed ID is already in your collection");
+      } else {
+        toast.error(error);
+      }
       return;
     }
 
-    // 2. Check if user already owns it
-    const ownershipCheck = await fetch(`${API_URL}/buyer-seeds/check/${id}/${userId}`);
-    const { exists } = await ownershipCheck.json();
-    
-    if (exists) {
-      toast.error("This seed ID already exists in your collection");
-      return; // Stop them here!
-    }
-
-    // If both pass, move to next step
-    setStep('photo');
-  } catch (error) {
-    toast.error("Lookup failed");
+    toast.success("Plant added successfully!");
+    navigate("/buyer-dashboard");
+  } catch (err: any) {
+    toast.error(err.message || "An unexpected error occurred");
+  } finally {
+    setIsSubmitting(false);
   }
 };
-
-      const { error } = await api.createSeed({
-        seed_id: formData.id,
-        name: formData.name,
-        image_url: imageUrl,
-        latitude: formData.location.lat ? parseFloat(formData.location.lat) : null,
-        longitude: formData.location.lng ? parseFloat(formData.location.lng) : null,
-        country: formData.location.country || null,
-        city: formData.location.city || null,
-        zip_code: formData.location.zip || null,
-        street: formData.location.street || null,
-        quantity: parseInt(formData.quantity) || 0,
-        notes: formData.notes || null,
-      });
-
-      if (error) { toast.error(`Failed to add plant: ${error}`); return; }
-      toast.success("Plant added!");
-      navigate("/dashboard");
-    } catch (err: any) {
-      toast.error(err?.message || "Something went wrong");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const canProceed = () => {
     if (currentStep === 1) return formData.id.trim() !== "";
