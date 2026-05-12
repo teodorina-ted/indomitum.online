@@ -271,27 +271,7 @@ const BuyerDashboard = () => {
     setActiveTab("seeds");
   };
 
-  const handleExportList = () => {
-    if (buyerSeeds.length === 0) { toast.error("No seeds to export"); return; }
-    const rows = [["Seed ID", "Name", "City", "Country", "Quantity", "Date Added"]];
-    buyerSeeds.forEach(bs => {
-      rows.push([
-        bs.seeds?.seed_id || "",
-        bs.seeds?.name || "",
-        bs.seeds?.city || "",
-        bs.seeds?.country || "",
-        String(bs.quantity || 1),
-        bs.seeds?.created_at ? new Date(bs.seeds.created_at).toLocaleDateString() : "",
-      ]);
-    });
-    const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "my-seed-list.csv"; a.click();
-    URL.revokeObjectURL(url);
-        setActiveTab("seeds");
-  };
+
 
   const handleExportList = () => {
     if (buyerSeeds.length === 0) { toast.error("No seeds to export"); return; }
