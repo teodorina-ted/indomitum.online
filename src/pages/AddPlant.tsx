@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Leaf, ArrowLeft, QrCode, Camera, MapPin, FileText, Check, Upload, Loader2 } from "lucide-react";
+import { Leaf, ArrowLeft, QrCode, Camera, MapPin, FileText, Check, Upload, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
@@ -234,18 +234,35 @@ const AddPlant = () => {
               <h2 className="text-2xl font-bold mb-2">Scan Bag ID</h2>
               <p className="text-muted-foreground">Scan a QR code or enter the ID manually.</p>
             </div>
-            <WebScanner onScan={handleWebScan} />
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">or enter manually</span>
+            {!formData.id && <WebScanner onScan={handleWebScan} />}
+            {formData.id ? (
+              <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/20 rounded-xl">
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                  <Check className="w-5 h-5 text-primary-foreground" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-primary">ID Scanned</p>
+                  <p className="font-mono text-sm text-foreground">{formData.id}</p>
+                </div>
+                <button onClick={() => setFormData(p => ({ ...p, id: "" }))} className="text-muted-foreground hover:text-foreground p-1">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-2 block">Bag ID</label>
-              <Input placeholder="e.g., SEED-ABC123" value={formData.id}
-                onChange={e => setFormData(p => ({ ...p, id: e.target.value }))} />
-            </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">or enter manually</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-2 block">Bag ID</label>
+                  <Input placeholder="e.g., SEED-ABC123" value={formData.id}
+                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))} />
+                </div>
+              </>
+            )}
           </div>
         )}
 

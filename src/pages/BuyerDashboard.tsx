@@ -3,6 +3,7 @@ import { escHtml } from "@/lib/escapeHtml";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -111,6 +112,8 @@ const BuyerDashboard = () => {
   const [currentPassport, setCurrentPassport] = useState<SeedPassport | null>(null);
   const [favorites, setFavorites] = useState<SeedPassport[]>([]);
   const [favoritesSortOption, setFavoritesSortOption] = useState<"name" | "date" | "quantity">("name");
+  const [selectedSeeds, setSelectedSeeds] = useState<string[]>([]);
+  const [selectedFavs, setSelectedFavs] = useState<string[]>([]);
 
   const tourStorageKey = "indomitum_buyer_tour_completed";
   const [tourOpen, setTourOpen] = useState(false);
@@ -266,6 +269,89 @@ const BuyerDashboard = () => {
     const { data } = await api.getBuyerSeeds();
     if (data) setBuyerSeeds(data);
     setActiveTab("seeds");
+  };
+
+  const handleExportList = () => {
+    if (buyerSeeds.length === 0) { toast.error("No seeds to export"); return; }
+    const rows = [["Seed ID", "Name", "City", "Country", "Quantity", "Date Added"]];
+    buyerSeeds.forEach(bs => {
+      rows.push([
+        bs.seeds?.seed_id || "",
+        bs.seeds?.name || "",
+        bs.seeds?.city || "",
+        bs.seeds?.country || "",
+        String(bs.quantity || 1),
+        bs.seeds?.created_at ? new Date(bs.seeds.created_at).toLocaleDateString() : "",
+      ]);
+    });
+    const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "my-seed-list.csv"; a.click();
+    URL.revokeObjectURL(url);
+    t    setActiveTab("seeds");
+  };
+
+  const handleExportList = () => {
+    if (buyerSeeds.length === 0) { toast.error("No seeds to export"); return; }
+    const rows = [["Seed ID", "Name", "City", "Country", "Quantity"]];
+    buyerSeeds.forEach(bs => rows.push([bs.seeds?.seed_id || "", bs.seeds?.name || "", bs.seeds?.city || "", bs.seeds?.country || "", String(bs.quantity || 1)]));
+    const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "my-seed-list.csv"; a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Exported as CSV!");
+  };
+
+  const handleSelectSeed = (id: string, checked: boolean) => {
+    if (checked) setSelectedSeeds(prev => [...prev, id]);
+    else setSelectedSeeds(prev => prev.filter(s => s !== id));
+  };
+
+  const handleSelectAllSeeds = (checked: boolean) => {
+    setSelectedSeeds(checked ? filteredSeeds.map(bs => bs.id) : []);
+  };
+
+  const handleSelectFav = (seedId: string, checked: boolean) => {
+    if (checked) setSelectedFavs(prev => [...prev, seedId]);
+    else setSelectedFavs(prev => prev.filter(s => s !== seedId));
+  };
+
+  const handleExportSelected = () => {
+    const selected = buyerSeeds.filter(bs => selectedSeeds.includes(bs.id));
+    if (!selected.length) { toast.error("Select seeds first"); return; }
+    const rows = [["Seed ID", "Name", "City", "Country", "Quantity"]];
+    selected.forEach(bs => rows.push([bs.seeds?.seed_id || "", bs.seeds?.name || "", bs.seeds?.city || "", bs.seeds?.country || "", String(bs.quantity || 1)]));
+    const csv = rows.map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "selected-seeds.csv"; a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${selected.length} seeds!`);
+    setSelectedSeeds([]);
+  };
+
+  const handleBulkAddFavsToList = async () => {
+    if (!selectedFavs.length) { toast.error("Select favorites first"); return; }
+    const toAdd = filteredFavorites.filter(f => selectedFavs.includes(f.seed_id));
+    let added = 0;
+    for (const seed of toAdd) {
+      const already = buyerSeeds.some(bs => bs.seeds?.seed_id === seed.seed_id);
+      if (!already) {
+        const { error } = await api.assignBuyerSeed({ seed_id: seed.id, quantity: 1 });
+        if (!error) added++;
+      }
+    }
+    if (added > 0) {
+      toast.success(`Added ${added} seeds to My List!`);
+      const { data } = await api.getBuyerSeeds();
+      if (data) setBuyerSeeds(data);
+    } else {
+      toast.info("All selected seeds already in your list");
+    }
+    setSelectedFavs([]);
   };
 
   const handleSignOut = async () => {
@@ -1082,7 +1168,7 @@ const BuyerDashboard = () => {
                     className="pl-10"
                   />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -1090,13 +1176,17 @@ const BuyerDashboard = () => {
                     className="hidden"
                     onChange={processImportFile}
                   />
-                  <Button
-                    variant="secondary"
-                    size="default"
-                    onClick={handleImport}
-                  >
+                  <Button variant="outline" size="default" onClick={() => setActiveTab("scan")}>
+                    <Camera className="w-4 h-4 mr-2" />
+                    Scan
+                  </Button>
+                  <Button variant="secondary" size="default" onClick={handleImport}>
                     <Upload className="w-4 h-4 mr-2" />
                     Import
+                  </Button>
+                  <Button variant="outline" size="default" onClick={handleExportList}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
                   </Button>
                 </div>
               </div>
@@ -1183,10 +1273,22 @@ const BuyerDashboard = () => {
               </Dialog>
 
               {/* Seeds List */}
+              {selectedSeeds.length > 0 && (
+                <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-xl mb-3">
+                  <span className="text-sm font-medium text-primary">{selectedSeeds.length} selected</span>
+                  <Button size="sm" variant="outline" className="ml-auto" onClick={handleExportSelected}>
+                    <Download className="w-3.5 h-3.5 mr-1" />Export
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => setSelectedSeeds([])}>
+                    Clear
+                  </Button>
+                </div>
+              )}
               {filteredSeeds.length > 0 ? (
                 <div className="bg-card rounded-xl border border-border overflow-hidden">
                   <table className="w-full">
                     <thead><tr className="border-b border-border bg-muted/50">
+                      <th className="px-4 py-3 w-10"><Checkbox checked={selectedSeeds.length === filteredSeeds.length && filteredSeeds.length > 0} onCheckedChange={(c) => handleSelectAllSeeds(!!c)} /></th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plant</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden sm:table-cell">ID</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden md:table-cell">Origin</th>
@@ -1196,6 +1298,7 @@ const BuyerDashboard = () => {
                     <tbody className="divide-y divide-border">
                       {filteredSeeds.map((bs) => (
                         <tr key={bs.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3 w-10"><Checkbox checked={selectedSeeds.includes(bs.id)} onCheckedChange={(c) => handleSelectSeed(bs.id, !!c)} /></td>
                           <td className="px-4 py-3"><div className="flex items-center gap-3">
                             {bs.seeds?.image_url ? <img src={bs.seeds.image_url} alt={bs.seeds?.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0"><Leaf className="w-5 h-5 text-muted-foreground" /></div>}
                             <span className="font-medium text-foreground text-sm truncate max-w-[120px]">{bs.seeds?.name}</span>
@@ -1256,10 +1359,22 @@ const BuyerDashboard = () => {
               </div>
 
               {/* Favorites List */}
+              {selectedFavs.length > 0 && (
+                <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-xl mb-3">
+                  <span className="text-sm font-medium text-primary">{selectedFavs.length} selected</span>
+                  <Button size="sm" variant="outline" className="ml-auto" onClick={handleBulkAddFavsToList}>
+                    <Plus className="w-3.5 h-3.5 mr-1" />Add All to List
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => setSelectedFavs([])}>
+                    Clear
+                  </Button>
+                </div>
+              )}
               {filteredFavorites.length > 0 ? (
                 <div className="bg-card rounded-xl border border-border overflow-hidden">
                   <table className="w-full">
                     <thead><tr className="border-b border-border bg-muted/50">
+                      <th className="px-4 py-3 w-10"><Checkbox checked={selectedFavs.length === filteredFavorites.length && filteredFavorites.length > 0} onCheckedChange={(c) => setSelectedFavs(!!c ? filteredFavorites.map(f => f.seed_id) : [])} /></th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plant</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden sm:table-cell">ID</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden md:table-cell">Origin</th>
@@ -1269,6 +1384,7 @@ const BuyerDashboard = () => {
                     <tbody className="divide-y divide-border">
                       {filteredFavorites.map((seed) => (
                         <tr key={seed.seed_id} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3 w-10"><Checkbox checked={selectedFavs.includes(seed.seed_id)} onCheckedChange={(c) => handleSelectFav(seed.seed_id, !!c)} /></td>
                           <td className="px-4 py-3"><div className="flex items-center gap-3">
                             {seed.image_url ? <img src={seed.image_url} alt={seed.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0"><Leaf className="w-5 h-5 text-muted-foreground" /></div>}
                             <span className="font-medium text-foreground text-sm truncate max-w-[120px]">{seed.name}</span>
