@@ -241,14 +241,12 @@ const AddPlant = () => {
               <h2 className="text-2xl font-bold mb-2">Scan Bag ID</h2>
               <p className="text-muted-foreground">Scan a QR code or enter the ID manually.</p>
             </div>
-
-            {/* Scanner — always mounted, hidden once ID is captured to prevent glitch */}
+            {/* Scanner — always mounted, hidden via CSS once ID captured to avoid remount glitch */}
             <div style={{ display: formData.id ? "none" : "block" }}>
               <WebScanner onScan={handleWebScan} />
             </div>
 
-            {/* Scanned confirmation badge */}
-            {formData.id && (
+            {formData.id ? (
               <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/20 rounded-xl">
                 <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
                   <Check className="w-5 h-5 text-primary-foreground" />
@@ -261,10 +259,7 @@ const AddPlant = () => {
                   <X className="w-4 h-4" />
                 </button>
               </div>
-            )}
-
-            {/* Manual input — always visible below scanner */}
-            {!formData.id && (
+            ) : (
               <>
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
@@ -274,12 +269,8 @@ const AddPlant = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-2 block">Bag ID</label>
-                  <Input
-                    placeholder="e.g., SEED-ABC123"
-                    value={formData.id}
-                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))}
-                    onKeyDown={e => e.key === "Enter" && formData.id.trim() && setCurrentStep(2)}
-                  />
+                  <Input placeholder="e.g., SEED-ABC123" value={formData.id}
+                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))} />
                 </div>
               </>
             )}
