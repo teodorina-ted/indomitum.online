@@ -25,6 +25,8 @@ import {
   ExternalLink,
   ScanLine,
   Plus,
+  ShoppingBag,
+  Trash2,
   Download,
   Upload,
   Heart,
@@ -245,37 +247,20 @@ const BuyerDashboard = () => {
 
   const handleWebScan = async (result: string) => {
     setShowWebScanner(false);
-    // Extract seed ID from passport URL if scanned from QR
     let seedId = result.trim();
     if (seedId.includes("/passport/")) {
       seedId = decodeURIComponent(seedId.split("/passport/").pop()?.split("?")[0] || seedId);
     } else if (seedId.startsWith("http")) {
-      try {
-        const parts = new URL(seedId).pathname.split("/").filter(Boolean);
-        seedId = parts[parts.length - 1] || seedId;
-      } catch {}
+      try { const parts = new URL(seedId).pathname.split("/").filter(Boolean); seedId = parts[parts.length - 1] || seedId; } catch {}
     }
     await lookupSeed(seedId);
   };
 
   const handleAddToMyList = async (seed: SeedPassport) => {
-    // Check if already in list
-    const already = buyerSeeds.some(bs => 
-      bs.seeds?.seed_id === seed.seed_id || bs.seed_id === seed.id
-    );
-    if (already) {
-      toast.info("Already in your list!");
-      setPassportOpen(false);
-      setActiveTab("seeds");
-      return;
-    }
-    // seed.id is the UUID from seeds table
+    const already = buyerSeeds.some(bs => bs.seeds?.seed_id === seed.seed_id || bs.seed_id === seed.id);
+    if (already) { toast.info("Already in your list!"); setPassportOpen(false); setActiveTab("seeds"); return; }
     const { error } = await api.assignBuyerSeed({ seed_id: seed.id, quantity: 1 });
-    if (error) {
-      console.error("assignBuyerSeed error:", error);
-      toast.error("Failed to add: " + error);
-      return;
-    }
+    if (error) { toast.error("Failed to add: " + error); return; }
     toast.success("Added to My List! ✅");
     setPassportOpen(false);
     const { data } = await api.getBuyerSeeds();
@@ -983,7 +968,38 @@ const BuyerDashboard = () => {
               </div>
 
               <div className="space-y-4">
-                <WebScanner onScan={handleWebScan} />
+                {showWebScanner ? (
+                  <div className="space-y-4">
+                    <WebScanner onScan={handleWebScan} />
+                    <Button
+                      variant="outline"
+                      className="w-full max-w-xs mx-auto block"
+                      onClick={() => setShowWebScanner(false)}
+                    >
+                      Cancel Scanning
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="aspect-square max-w-xs mx-auto rounded-2xl border-2 border-dashed border-border bg-muted/30 flex flex-col items-center justify-center p-8">
+                    <ScanLine className="w-16 h-16 text-primary mb-4" />
+                    <Button onClick={handleNativeScan} size="lg" disabled={isScanning}>
+                      {isScanning ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Scanning...
+                        </>
+                      ) : (
+                        <>
+                          <Camera className="w-4 h-4 mr-2" />
+                          Scan Barcode
+                        </>
+                      )}
+                    </Button>
+                    <span className="text-xs text-muted-foreground mt-2">
+                      Supports QR, Code128, EAN-13 & more
+                    </span>
+                  </div>
+                )}
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -1166,70 +1182,40 @@ const BuyerDashboard = () => {
                 </DialogContent>
               </Dialog>
 
-              {/* Seeds List - row style like collector dashboard */}
+              {/* Seeds List */}
               {filteredSeeds.length > 0 ? (
                 <div className="bg-card rounded-xl border border-border overflow-hidden">
                   <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plant</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden sm:table-cell">ID</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden md:table-cell">Origin</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Qty</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Actions</th>
-                      </tr>
-                    </thead>
+                    <thead><tr className="border-b border-border bg-muted/50">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plant</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden sm:table-cell">ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden md:table-cell">Origin</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Qty</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Actions</th>
+                    </tr></thead>
                     <tbody className="divide-y divide-border">
                       {filteredSeeds.map((bs) => (
                         <tr key={bs.id} className="hover:bg-muted/30 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              {bs.seeds?.image_url ? (
-                                <img src={bs.seeds.image_url} alt={bs.seeds?.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                              ) : (
-                                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                                  <Leaf className="w-5 h-5 text-muted-foreground" />
-                                </div>
-                              )}
-                              <span className="font-medium text-foreground text-sm truncate max-w-[120px]">{bs.seeds?.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 hidden sm:table-cell">
-                            <span className="font-mono text-xs text-muted-foreground">{bs.seeds?.seed_id}</span>
-                          </td>
-                          <td className="px-4 py-3 hidden md:table-cell">
-                            <span className="text-sm text-muted-foreground">
-                              {bs.seeds?.city && bs.seeds?.country ? `${bs.seeds.city}, ${bs.seeds.country}` : "—"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="text-sm text-foreground">{bs.quantity}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={() => toggleFavorite(bs.seeds)}
-                                className={`p-1.5 rounded-lg transition-colors ${isFavorite(bs.seeds?.seed_id) ? "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20" : "text-muted-foreground hover:text-yellow-500 hover:bg-muted"}`}
-                                title={isFavorite(bs.seeds?.seed_id) ? "Remove from favorites" : "Add to favorites"}
-                              >
-                                <Star className={`w-4 h-4 ${isFavorite(bs.seeds?.seed_id) ? "fill-current" : ""}`} />
-                              </button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2 text-xs"
-                                onClick={() => { setCurrentPassport(bs.seeds); setPassportOpen(true); }}
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </Button>
-                            </div>
-                          </td>
+                          <td className="px-4 py-3"><div className="flex items-center gap-3">
+                            {bs.seeds?.image_url ? <img src={bs.seeds.image_url} alt={bs.seeds?.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0"><Leaf className="w-5 h-5 text-muted-foreground" /></div>}
+                            <span className="font-medium text-foreground text-sm truncate max-w-[120px]">{bs.seeds?.name}</span>
+                          </div></td>
+                          <td className="px-4 py-3 hidden sm:table-cell"><span className="font-mono text-xs text-muted-foreground">{bs.seeds?.seed_id}</span></td>
+                          <td className="px-4 py-3 hidden md:table-cell"><span className="text-sm text-muted-foreground">{bs.seeds?.city && bs.seeds?.country ? `${bs.seeds.city}, ${bs.seeds.country}` : "—"}</span></td>
+                          <td className="px-4 py-3"><span className="text-sm">{bs.quantity}</span></td>
+                          <td className="px-4 py-3"><div className="flex items-center justify-end gap-1">
+                            <button onClick={() => bs.seeds && toggleFavorite(bs.seeds)} className={`p-1.5 rounded-lg transition-colors ${isFavorite(bs.seeds?.seed_id) ? "text-yellow-500" : "text-muted-foreground hover:text-yellow-500"}`}>
+                              <Star className={`w-4 h-4 ${isFavorite(bs.seeds?.seed_id) ? "fill-current" : ""}`} />
+                            </button>
+                            <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => { setCurrentPassport(bs.seeds); setPassportOpen(true); }}>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Button>
+                          </div></td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </div>
-              ) : (
+                </div>              ) : (
                 <div className="py-12 text-center">
                   <Package className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
                   <p className="text-muted-foreground">
@@ -1269,121 +1255,42 @@ const BuyerDashboard = () => {
                 </div>
               </div>
 
-              {/* Favorites List - row style */}
+              {/* Favorites List */}
               {filteredFavorites.length > 0 ? (
                 <div className="bg-card rounded-xl border border-border overflow-hidden">
                   <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plant</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden sm:table-cell">ID</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden md:table-cell">Origin</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Qty</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Actions</th>
-                      </tr>
-                    </thead>
+                    <thead><tr className="border-b border-border bg-muted/50">
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Plant</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden sm:table-cell">ID</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase hidden md:table-cell">Origin</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Qty</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Actions</th>
+                    </tr></thead>
                     <tbody className="divide-y divide-border">
                       {filteredFavorites.map((seed) => (
                         <tr key={seed.seed_id} className="hover:bg-muted/30 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              {seed.image_url ? (
-                                <img src={seed.image_url} alt={seed.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                              ) : (
-                                <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                                  <Leaf className="w-5 h-5 text-muted-foreground" />
-                                </div>
-                              )}
-                              <span className="font-medium text-foreground text-sm truncate max-w-[120px]">{seed.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 hidden sm:table-cell">
-                            <span className="font-mono text-xs text-muted-foreground">{seed.seed_id}</span>
-                          </td>
-                          <td className="px-4 py-3 hidden md:table-cell">
-                            <span className="text-sm text-muted-foreground">
-                              {seed.city && seed.country ? `${seed.city}, ${seed.country}` : "—"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="text-sm text-foreground">{seed.quantity}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button size="sm" className="h-8 px-2 text-xs" onClick={() => handleAddToMyList(seed)}>
-                                <Plus className="w-3.5 h-3.5 mr-1" />Add
-                              </Button>
-                              <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => { setCurrentPassport(seed); setPassportOpen(true); }}>
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </Button>
-                              <button onClick={() => toggleFavorite(seed)} className="p-1.5 rounded-lg text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors">
-                                <Star className="w-4 h-4 fill-current" />
-                              </button>
-                            </div>
-                          </td>
+                          <td className="px-4 py-3"><div className="flex items-center gap-3">
+                            {seed.image_url ? <img src={seed.image_url} alt={seed.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" /> : <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0"><Leaf className="w-5 h-5 text-muted-foreground" /></div>}
+                            <span className="font-medium text-foreground text-sm truncate max-w-[120px]">{seed.name}</span>
+                          </div></td>
+                          <td className="px-4 py-3 hidden sm:table-cell"><span className="font-mono text-xs text-muted-foreground">{seed.seed_id}</span></td>
+                          <td className="px-4 py-3 hidden md:table-cell"><span className="text-sm text-muted-foreground">{seed.city && seed.country ? `${seed.city}, ${seed.country}` : "—"}</span></td>
+                          <td className="px-4 py-3"><span className="text-sm">{seed.quantity}</span></td>
+                          <td className="px-4 py-3"><div className="flex items-center justify-end gap-1">
+                            <Button size="sm" className="h-8 px-2 text-xs" onClick={() => handleAddToMyList(seed)}>
+                              <Plus className="w-3.5 h-3.5 mr-1" />Add
+                            </Button>
+                            <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => { setCurrentPassport(seed); setPassportOpen(true); }}>
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Button>
+                            <button onClick={() => toggleFavorite(seed)} className="p-1.5 rounded-lg text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-colors">
+                              <Star className="w-4 h-4 fill-current" />
+                            </button>
+                          </div></td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                </div>
-              ) : (
-                        <div className="w-full h-40 bg-muted flex items-center justify-center">
-                          <Leaf className="w-12 h-12 text-muted-foreground" />
-                        </div>
-                      )}
-                      <div className="p-4">
-                        <div className="flex items-start justify-between mb-1">
-                          <h3 className="font-semibold text-foreground">{seed.name}</h3>
-                          <button
-                            onClick={() => toggleFavorite(seed)}
-                            className="text-yellow-500 hover:text-yellow-600"
-                          >
-                            <Star className="w-5 h-5 fill-current" />
-                          </button>
-                        </div>
-                        <p className="text-xs font-mono text-muted-foreground mb-3">{seed.seed_id}</p>
-                        
-                        <div className="space-y-1.5 text-sm">
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <MapPin className="w-3.5 h-3.5" />
-                            <span>{seed.city && seed.country ? `${seed.city}, ${seed.country}` : "—"}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Package className="w-3.5 h-3.5" />
-                            <span>Qty: {seed.quantity}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 mt-4">
-                          <Button
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => handleAddToMyList(seed)}
-                          >
-                            <Plus className="w-3.5 h-3.5 mr-1" />
-                            Add to List
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              setCurrentPassport(seed);
-                              setPassportOpen(true);
-                            }}
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => downloadPassportPDF(seed)}
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               ) : (
                 <div className="py-12 text-center">
@@ -1402,7 +1309,7 @@ const BuyerDashboard = () => {
         </div>
       </main>
 
-      {/* Plant Passport Modal */}
+            {/* Plant Passport Modal */}
       <Dialog open={passportOpen} onOpenChange={setPassportOpen}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1477,17 +1384,8 @@ const BuyerDashboard = () => {
 
               {/* Action buttons */}
               <div className="flex flex-col gap-2 pt-2">
-                {/* Primary CTA - Add to My List */}
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    if (currentPassport) {
-                      handleAddToMyList(currentPassport);
-                    }
-                  }}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add to My List
+                <Button className="w-full" onClick={() => currentPassport && handleAddToMyList(currentPassport)}>
+                  <Plus className="w-4 h-4 mr-2" />Add to My List
                 </Button>
                 <div className="flex gap-2">
                   <Button
