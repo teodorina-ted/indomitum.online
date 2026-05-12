@@ -82,7 +82,7 @@ const CookiePolicy = () => {
 
           <section>
             <h2 className="text-xl font-semibold text-foreground">6. Contact</h2>
-            <p className="text-muted-foreground">If you have questions about our use of cookies, please contact us through the support form on our website.</p>
+            <p className="text-muted-foreground">If you have questions about our use of cookies, please contact us at <a href="mailto:info@indomitum.online" className="text-primary underline">info@indomitum.online</a>.</p>
           </section>
         </div>
       </main>

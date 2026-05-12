@@ -47,8 +47,9 @@ export function GuidedTour({ steps, storageKey, open, onFinish }: GuidedTourProp
       {/* Backdrop */}
       <div className="fixed inset-0 bg-black/40 z-40" onClick={handleFinish} />
 
-      {/* Fixed bottom sheet — all steps in one place */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-2xl shadow-2xl border-t border-border p-6 max-w-lg mx-auto">
+      {/* Bottom sheet — fluid, centered, responsive */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pointer-events-none">
+      <div className="w-full max-w-lg pointer-events-auto bg-background rounded-t-2xl shadow-2xl border-t border-border p-5 sm:p-6 mx-0 sm:mx-4 sm:mb-4 sm:rounded-2xl">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -109,6 +110,7 @@ export function GuidedTour({ steps, storageKey, open, onFinish }: GuidedTourProp
             Skip tour
           </button>
         )}
+      </div>
       </div>
     </>
   );

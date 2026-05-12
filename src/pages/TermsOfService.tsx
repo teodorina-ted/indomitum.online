@@ -94,7 +94,7 @@ const TermsOfService = () => {
 
           <section>
             <h2 className="text-xl font-semibold text-foreground">12. Contact</h2>
-            <p className="text-muted-foreground">For questions about these Terms of Service, please contact us through the support form on our website.</p>
+            <p className="text-muted-foreground">For questions about these Terms of Service, please contact us at <a href="mailto:info@indomitum.online" className="text-primary underline">info@indomitum.online</a>.</p>
           </section>
         </div>
       </main>

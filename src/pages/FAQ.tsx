@@ -105,9 +105,10 @@ const FAQ = () => {
 
         <div className="text-center mt-12 space-y-3">
           <p className="text-muted-foreground text-sm">Still have questions?</p>
-          <Link to="/#contact">
+          <a href="mailto:info@indomitum.online">
             <Button variant="outline">Contact Support</Button>
-          </Link>
+          </a>
+          <p className="text-xs text-muted-foreground">info@indomitum.online</p>
         </div>
       </div>
     </div>
