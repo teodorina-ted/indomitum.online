@@ -16,6 +16,8 @@ const Scanner = () => {
 
   useEffect(() => {
     mountedRef.current = true;
+    // Auto-start camera — no tap needed
+    startScanner();
     return () => {
       mountedRef.current = false;
       stopScanner();
@@ -122,27 +124,31 @@ const Scanner = () => {
           </p>
         </div>
 
-        {/* Scanner box — same style as collector */}
-        <div
-          id="buyer-scanner-container"
-          className="w-full aspect-square max-w-sm mx-auto rounded-2xl overflow-hidden bg-muted border-2 border-dashed border-border"
-          style={{ minHeight: isScanning ? "300px" : "200px" }}
-        />
-
-        {/* Controls */}
-        <div className="flex justify-center">
-          {!isScanning ? (
-            <Button onClick={startScanner} size="lg" className="gap-2 w-full max-w-xs" disabled={starting}>
-              <Camera className="h-5 w-5" />
-              {starting ? "Starting..." : "Scan with Camera"}
-            </Button>
-          ) : (
-            <Button onClick={stopScanner} variant="destructive" size="lg" className="gap-2 w-full max-w-xs">
-              <StopCircle className="h-5 w-5" />
-              Stop Scanning
-            </Button>
+        {/* Scanner box */}
+        <div className="relative w-full max-w-sm mx-auto">
+          <div
+            id="buyer-scanner-container"
+            className="w-full aspect-square rounded-2xl overflow-hidden bg-muted border-2 border-border"
+            style={{ minHeight: "280px" }}
+          />
+          {/* Loading overlay while camera starts */}
+          {starting && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-2xl bg-muted">
+              <Camera className="h-10 w-10 text-muted-foreground animate-pulse" />
+              <p className="text-sm text-muted-foreground">Starting camera…</p>
+            </div>
           )}
         </div>
+
+        {/* Stop button — only shown once scanning */}
+        {isScanning && (
+          <div className="flex justify-center">
+            <Button onClick={stopScanner} variant="outline" size="lg" className="gap-2 w-full max-w-xs">
+              <StopCircle className="h-5 w-5" />
+              Stop Camera
+            </Button>
+          </div>
+        )}
 
         {/* Divider */}
         <div className="relative">
