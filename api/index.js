@@ -234,6 +234,219 @@ async function sendVerificationEmail(email, fullName, token) {
   });
 }
 
+
+// ── Public Passport ─────────────────────────────────────
+app.get("/passport/:seedId", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT s.*, p.full_name as collector_name
+       FROM seeds s
+       LEFT JOIN profiles p ON p.user_id = s.added_by
+       WHERE s.seed_id = $1 LIMIT 1`,
+      [req.params.seedId]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Seed not found" });
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Buyer Favorites ──────────────────────────────────────
+app.get("/buyer/favorites", auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT s.* FROM seeds s
+       INNER JOIN buyer_favorites bf ON bf.seed_id = s.id
+       WHERE bf.buyer_id = $1`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/buyer/favorites", auth, async (req, res) => {
+  const { seed_id } = req.body;
+  try {
+    const { rows: seedRows } = await pool.query("SELECT id FROM seeds WHERE seed_id = $1", [seed_id]);
+    if (!seedRows.length) return res.status(404).json({ error: "Seed not found" });
+    await pool.query(
+      "INSERT INTO buyer_favorites (buyer_id, seed_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+      [req.user.id, seedRows[0].id]
+    );
+    res.json({ message: "Added to favorites" });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete("/buyer/favorites/:seedId", auth, async (req, res) => {
+  try {
+    const { rows: seedRows } = await pool.query("SELECT id FROM seeds WHERE seed_id = $1", [req.params.seedId]);
+    if (seedRows.length) {
+      await pool.query("DELETE FROM buyer_favorites WHERE buyer_id = $1 AND seed_id = $2", [req.user.id, seedRows[0].id]);
+    }
+    res.json({ message: "Removed from favorites" });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Buyer Orders ─────────────────────────────────────────
+app.get("/buyer/orders", auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT o.*, 
+        json_agg(json_build_object('seed_id', oi.seed_id, 'quantity', oi.quantity, 'name', s.name)) as items
+       FROM orders o
+       LEFT JOIN order_items oi ON oi.order_id = o.id
+       LEFT JOIN seeds s ON s.id = oi.seed_id
+       WHERE o.buyer_id = $1
+       GROUP BY o.id
+       ORDER BY o.created_at DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/buyer/orders", auth, async (req, res) => {
+  const { items, notes, delivery_address } = req.body;
+  if (!items?.length) return res.status(400).json({ error: "No items in order" });
+  try {
+    await pool.query("BEGIN");
+    const { rows: orderRows } = await pool.query(
+      `INSERT INTO orders (buyer_id, status, notes, delivery_address, created_at)
+       VALUES ($1, 'pending', $2, $3, now()) RETURNING *`,
+      [req.user.id, notes || null, delivery_address || null]
+    );
+    const order = orderRows[0];
+
+    for (const item of items) {
+      const { rows: seedRows } = await pool.query("SELECT id FROM seeds WHERE seed_id = $1", [item.seed_id]);
+      if (seedRows.length) {
+        await pool.query(
+          "INSERT INTO order_items (order_id, seed_id, quantity) VALUES ($1, $2, $3)",
+          [order.id, seedRows[0].id, item.quantity || 1]
+        );
+      }
+    }
+
+    await pool.query(
+      "INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, 'pending', $2)",
+      [order.id, req.user.id]
+    );
+    await pool.query("COMMIT");
+
+    // Notify collector via email if Resend is configured
+    if (resend) {
+      try {
+        const { rows: buyerProfile } = await pool.query("SELECT full_name FROM profiles WHERE user_id = $1", [req.user.id]);
+        const buyerName = buyerProfile[0]?.full_name || "A buyer";
+        // Get collector emails for the seeds
+        const seedIds = items.map(i => i.seed_id);
+        const { rows: collectors } = await pool.query(
+          `SELECT DISTINCT u.email, p.full_name FROM users u
+           JOIN profiles p ON p.user_id = u.id
+           JOIN seeds s ON s.added_by = u.id
+           WHERE s.seed_id = ANY($1)`,
+          [seedIds]
+        );
+        for (const collector of collectors) {
+          await resend.emails.send({
+            from: "Indomitum <noreply@indomitum.online>",
+            to: collector.email,
+            subject: `New order from ${buyerName}`,
+            html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px">
+              <h2 style="color:#2d5016">🌱 New Order Received</h2>
+              <p>Hi ${collector.full_name || "Collector"},</p>
+              <p><strong>${buyerName}</strong> has sent you a seed order.</p>
+              <p><strong>Items:</strong> ${items.map(i => \`\${i.name || i.seed_id} ×\${i.quantity || 1}\`).join(", ")}</p>
+              ${delivery_address ? \`<p><strong>Delivery:</strong> \${delivery_address}</p>\` : ""}
+              ${notes ? \`<p><strong>Notes:</strong> \${notes}</p>\` : ""}
+              <p>Log in to <a href="${APP_URL}">Indomitum</a> to review and respond.</p>
+            </div>`
+          }).catch(console.error);
+        }
+      } catch (e) { console.error("Email notify error:", e); }
+    }
+
+    res.status(201).json(order);
+  } catch (err) {
+    await pool.query("ROLLBACK");
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Collector Orders ─────────────────────────────────────
+app.get("/collector/orders", auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT o.*, 
+        p.full_name as buyer_name,
+        json_agg(json_build_object('seed_id', s.seed_id, 'quantity', oi.quantity, 'name', s.name)) as items
+       FROM orders o
+       LEFT JOIN profiles p ON p.user_id = o.buyer_id
+       LEFT JOIN order_items oi ON oi.order_id = o.id
+       LEFT JOIN seeds s ON s.id = oi.seed_id
+       WHERE EXISTS (
+         SELECT 1 FROM order_items oi2
+         JOIN seeds s2 ON s2.id = oi2.seed_id
+         WHERE oi2.order_id = o.id AND s2.added_by = $1
+       )
+       GROUP BY o.id, p.full_name
+       ORDER BY o.created_at DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ── Buyer Bin ────────────────────────────────────────────
+app.get("/buyer/bin", auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM buyer_bin WHERE buyer_id = $1 ORDER BY deleted_at DESC",
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/buyer/bin", auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "INSERT INTO buyer_bin (buyer_id, seed_data) VALUES ($1, $2) RETURNING *",
+      [req.user.id, JSON.stringify(req.body)]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/buyer/bin/:id/restore", auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM buyer_bin WHERE id = $1 AND buyer_id = $2",
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Not found" });
+    // Re-add to buyer_seeds
+    const seedData = rows[0].seed_data;
+    if (seedData?.seed_id) {
+      const { rows: seedRows } = await pool.query("SELECT id FROM seeds WHERE seed_id = $1", [seedData.seed_id]);
+      if (seedRows.length) {
+        await pool.query(
+          "INSERT INTO buyer_seeds (buyer_id, seed_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+          [req.user.id, seedRows[0].id]
+        );
+      }
+    }
+    await pool.query("DELETE FROM buyer_bin WHERE id = $1", [req.params.id]);
+    res.json({ message: "Restored" });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete("/buyer/bin/:id", auth, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM buyer_bin WHERE id = $1 AND buyer_id = $2", [req.params.id, req.user.id]);
+    res.json({ message: "Deleted permanently" });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── Health & Metrics ────────────────────────────────────
 
 app.get("/health", async (_req, res) => {

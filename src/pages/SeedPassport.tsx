@@ -11,7 +11,10 @@ import {
   Loader2,
   QrCode,
   User,
-  Printer
+  Printer,
+  Heart,
+  Plus,
+  Check
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
@@ -42,36 +45,62 @@ const SeedPassport = () => {
   const [notFound, setNotFound] = useState(false);
   const [barcodeSvg, setBarcodeSvg] = useState<string>("");
 
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [inOrderList, setInOrderList] = useState(false);
+
   useEffect(() => {
-    // Redirect to login if not authenticated
-    if (!authLoading && !user) {
-      navigate(`/login?redirect=/passport/${seedId}`);
-      return;
-    }
-
+    // Public page - no auth required
     const fetchSeed = async () => {
-      if (!seedId || !user) return;
-
+      if (!seedId) return;
       setIsLoading(true);
+      // Try public endpoint first, fall back to authenticated
       const { data, error } = await api.getSeedBySeedId(seedId);
-
-      if (error) {
-        console.error(error);
-        setNotFound(true);
-      } else if (!data) {
+      if (error || !data) {
         setNotFound(true);
       } else {
         setSeed(data);
+        // Check if in favorites/order list if logged in
+        if (user) {
+          const favorites = JSON.parse(localStorage.getItem("buyer_favorites") || "[]");
+          setIsFavorite(favorites.includes(seedId));
+          const orderList = JSON.parse(localStorage.getItem("buyer_order_list") || "[]");
+          setInOrderList(orderList.some((s: any) => s.seed_id === seedId));
+        }
       }
       setIsLoading(false);
     };
+    fetchSeed();
+  }, [seedId, user]);
 
-    if (user) {
-      fetchSeed();
+  const handleToggleFavorite = () => {
+    if (!user) { navigate(`/login?redirect=/passport/${seedId}`); return; }
+    const favorites = JSON.parse(localStorage.getItem("buyer_favorites") || "[]");
+    if (isFavorite) {
+      localStorage.setItem("buyer_favorites", JSON.stringify(favorites.filter((id: string) => id !== seedId)));
+      setIsFavorite(false);
+      import("sonner").then(({ toast }) => toast.success("Removed from favorites"));
+    } else {
+      localStorage.setItem("buyer_favorites", JSON.stringify([...favorites, seedId]));
+      setIsFavorite(true);
+      import("sonner").then(({ toast }) => toast.success("Added to favorites ❤️"));
     }
-  }, [seedId, user, authLoading, navigate]);
+  };
 
-  if (authLoading || isLoading) {
+  const handleAddToList = () => {
+    if (!user) { navigate(`/login?redirect=/passport/${seedId}`); return; }
+    const orderList = JSON.parse(localStorage.getItem("buyer_order_list") || "[]");
+    if (inOrderList) {
+      localStorage.setItem("buyer_order_list", JSON.stringify(orderList.filter((s: any) => s.seed_id !== seedId)));
+      setInOrderList(false);
+      import("sonner").then(({ toast }) => toast.success("Removed from order list"));
+    } else {
+      localStorage.setItem("buyer_order_list", JSON.stringify([...orderList, { seed_id: seedId, name: seed?.name, quantity: 1 }]));
+      setInOrderList(true);
+      import("sonner").then(({ toast }) => toast.success("Added to order list ✅"));
+    }
+  };
+
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -237,7 +266,27 @@ const SeedPassport = () => {
               }}
             />
             <div className="mt-3 flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={handlePrint}>
+              {/* Buyer action buttons */}
+          <div className="flex gap-2 mb-4">
+            <Button
+              variant={isFavorite ? "default" : "outline"}
+              className={`flex-1 ${isFavorite ? "bg-red-500 hover:bg-red-600 border-red-500" : ""}`}
+              onClick={handleToggleFavorite}
+            >
+              <Heart className={`w-4 h-4 mr-2 ${isFavorite ? "fill-white" : ""}`} />
+              {isFavorite ? "Favorited" : "Favorite"}
+            </Button>
+            <Button
+              variant={inOrderList ? "default" : "outline"}
+              className="flex-1"
+              onClick={handleAddToList}
+            >
+              {inOrderList ? <Check className="w-4 h-4 mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+              {inOrderList ? "In List" : "Add to List"}
+            </Button>
+          </div>
+
+          <Button variant="outline" className="flex-1" onClick={handlePrint}>
                 <Printer className="w-4 h-4 mr-2" />
                 Print
               </Button>
