@@ -24,8 +24,7 @@ import {
   MapPin,
   ExternalLink,
   ScanLine,
-  ShoppingBag,
-  Trash2,
+  Plus,
   Download,
   Upload,
   Heart,
@@ -89,7 +88,8 @@ interface SeedPassport {
   created_at: string;
 }
 
-// Favorites stored in DB
+// Favorites stored locally
+const FAVORITES_KEY = "indomitum_buyer_favorites";
 
 const BuyerDashboard = () => {
   const { user, profile, signOut, isLoading: authLoading, isCollector } = useAuth();
@@ -132,13 +132,17 @@ const BuyerDashboard = () => {
   const [pendingSeedIdToUuid, setPendingSeedIdToUuid] = useState<Record<string, string>>({});
   const [pendingAssignedUuids, setPendingAssignedUuids] = useState<Set<string>>(new Set());
 
-  // Load favorites from DB
+  // Load favorites from localStorage
   useEffect(() => {
-    if (!user) return;
-    api.getFavorites().then(({ data }) => {
-      if (data) setFavorites(data);
-    });
-  }, [user]);
+    const stored = localStorage.getItem(FAVORITES_KEY);
+    if (stored) {
+      try {
+        setFavorites(JSON.parse(stored));
+      } catch {
+        setFavorites([]);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -149,17 +153,21 @@ const BuyerDashboard = () => {
     }
   }, []);
 
+  // Save favorites to localStorage
+  const saveFavorites = (newFavorites: SeedPassport[]) => {
+    setFavorites(newFavorites);
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(newFavorites));
+  };
+
   const isFavorite = (seedId: string) => favorites.some(f => f.seed_id === seedId);
 
-  const toggleFavorite = async (seed: SeedPassport) => {
+  const toggleFavorite = (seed: SeedPassport) => {
     if (isFavorite(seed.seed_id)) {
-      setFavorites(prev => prev.filter(f => f.seed_id !== seed.seed_id));
-      await api.removeFavorite(seed.seed_id);
+      saveFavorites(favorites.filter(f => f.seed_id !== seed.seed_id));
       toast.success("Removed from favorites");
     } else {
-      setFavorites(prev => [...prev, seed]);
-      await api.addFavorite(seed.seed_id);
-      toast.success("Added to favorites! ❤️");
+      saveFavorites([...favorites, seed]);
+      toast.success("Added to favorites!");
     }
   };
 
@@ -238,6 +246,26 @@ const BuyerDashboard = () => {
   const handleWebScan = async (result: string) => {
     setShowWebScanner(false);
     await lookupSeed(result);
+  };
+
+  const handleAddToMyList = async (seed: SeedPassport) => {
+    // Check if already in list
+    const already = buyerSeeds.some(bs => bs.seeds?.seed_id === seed.seed_id);
+    if (already) {
+      toast.info("Already in your list!");
+      return;
+    }
+    const { error } = await api.assignBuyerSeed({ seed_id: seed.id, quantity: 1 });
+    if (error) {
+      toast.error("Failed to add to list");
+      return;
+    }
+    toast.success("Added to My List! ✅");
+    setPassportOpen(false);
+    // Refresh list
+    const { data } = await api.getBuyerSeeds();
+    if (data) setBuyerSeeds(data);
+    setActiveTab("seeds");
   };
 
   const handleSignOut = async () => {
@@ -839,22 +867,6 @@ const BuyerDashboard = () => {
               Tracking
             </Link>
             <Link
-              to="/buyer/orders"
-              onClick={() => setSidebarOpen(false)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              <ShoppingBag className="w-5 h-5" />
-              Order History
-            </Link>
-            <Link
-              to="/buyer/bin"
-              onClick={() => setSidebarOpen(false)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              <Trash2 className="w-5 h-5" />
-              Removed Seeds
-            </Link>
-            <Link
               to="/buyer/settings"
               onClick={() => setSidebarOpen(false)}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
@@ -940,7 +952,38 @@ const BuyerDashboard = () => {
               </div>
 
               <div className="space-y-4">
-                <WebScanner onScan={handleWebScan} />
+                {showWebScanner ? (
+                  <div className="space-y-4">
+                    <WebScanner onScan={handleWebScan} />
+                    <Button
+                      variant="outline"
+                      className="w-full max-w-xs mx-auto block"
+                      onClick={() => setShowWebScanner(false)}
+                    >
+                      Cancel Scanning
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="aspect-square max-w-xs mx-auto rounded-2xl border-2 border-dashed border-border bg-muted/30 flex flex-col items-center justify-center p-8">
+                    <ScanLine className="w-16 h-16 text-primary mb-4" />
+                    <Button onClick={handleNativeScan} size="lg" disabled={isScanning}>
+                      {isScanning ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Scanning...
+                        </>
+                      ) : (
+                        <>
+                          <Camera className="w-4 h-4 mr-2" />
+                          Scan Barcode
+                        </>
+                      )}
+                    </Button>
+                    <span className="text-xs text-muted-foreground mt-2">
+                      Supports QR, Code128, EAN-13 & more
+                    </span>
+                  </div>
+                )}
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -1178,19 +1221,13 @@ const BuyerDashboard = () => {
                   ))}
                 </div>
               ) : (
-                <div className="py-12 text-center space-y-4">
-                  <Package className="w-12 h-12 text-muted-foreground/50 mx-auto" />
+                <div className="py-12 text-center">
+                  <Package className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
                   <p className="text-muted-foreground">
                     {buyerSeeds.length === 0 
-                      ? "No seeds in your collection yet." 
+                      ? "No seeds assigned to you yet. Contact your seller!" 
                       : "No seeds found"}
                   </p>
-                  {buyerSeeds.length === 0 && (
-                    <Button onClick={() => setActiveTab("scan")} size="lg" className="gap-2">
-                      <Camera className="w-4 h-4" />
-                      Scan a Seed Bag
-                    </Button>
-                  )}
                 </div>
               )}
             </div>
@@ -1266,26 +1303,30 @@ const BuyerDashboard = () => {
                         </div>
 
                         <div className="flex gap-2 mt-4">
+                          <Button
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleAddToMyList(seed)}
+                          >
+                            <Plus className="w-3.5 h-3.5 mr-1" />
+                            Add to List
+                          </Button>
                           <Button 
                             variant="outline" 
-                            size="sm" 
-                            className="flex-1"
+                            size="sm"
                             onClick={() => {
                               setCurrentPassport(seed);
                               setPassportOpen(true);
                             }}
                           >
-                            <ExternalLink className="w-3.5 h-3.5 mr-1" />
-                            View
+                            <ExternalLink className="w-3.5 h-3.5" />
                           </Button>
                           <Button 
                             variant="outline" 
-                            size="sm" 
-                            className="flex-1"
+                            size="sm"
                             onClick={() => downloadPassportPDF(seed)}
                           >
-                            <Download className="w-3.5 h-3.5 mr-1" />
-                            PDF
+                            <Download className="w-3.5 h-3.5" />
                           </Button>
                         </div>
                       </div>
@@ -1384,6 +1425,18 @@ const BuyerDashboard = () => {
 
               {/* Action buttons */}
               <div className="flex flex-col gap-2 pt-2">
+                {/* Primary CTA - Add to My List */}
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    if (currentPassport) {
+                      handleAddToMyList(currentPassport);
+                    }
+                  }}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add to My List
+                </Button>
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
