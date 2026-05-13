@@ -331,7 +331,7 @@ app.post("/buyer/orders", auth, async (req, res) => {
     for (const [collectorId, collectorItems] of Object.entries(collectorMap)) {
       const { rows: orderRows } = await pool.query(
         `INSERT INTO orders (buyer_id, collector_id, status, notes, delivery_address, created_at)
-         VALUES ($1, $2, 'pending', $3, $4, now()) RETURNING *`,
+         VALUES ($1, $2, 'requested', $3, $4, now()) RETURNING *`,
         [req.user.id, collectorId, notes || null, delivery_address || null]
       );
       const order = orderRows[0];
@@ -345,7 +345,7 @@ app.post("/buyer/orders", auth, async (req, res) => {
       }
 
       await pool.query(
-        "INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, 'pending', $2)",
+        "INSERT INTO order_status_history (order_id, status, changed_by) VALUES ($1, 'requested', $2)",
         [order.id, req.user.id]
       );
     }
@@ -1396,38 +1396,11 @@ app.delete("/buyer-seeds/:id", auth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-/*
+
 app.get("/buyer-seeds/assigned-uuids", auth, async (req, res) => {
   try {
     const { rows } = await pool.query("SELECT seed_id FROM buyer_seeds WHERE buyer_id = $1", [req.user.id]);
     res.json(rows.map((r) => r.seed_id));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-*/
-app.get("/buyer-seeds/check/:seedId", auth, async (req, res) => {
-  try {
-    const { seedId } = req.params;
-    const buyerId = req.user.id;
-
-    // 1. Check if the seed exists in the master list at all
-    const masterSeed = await pool.query("SELECT id FROM seeds WHERE id = $1", [seedId]);
-    if (masterSeed.rows.length === 0) {
-      return res.status(404).json({ error: "Seed ID not found in database" });
-    }
-
-    // 2. Check if this specific buyer already has it
-    const existing = await pool.query(
-      "SELECT id FROM buyer_seeds WHERE buyer_id = $1 AND seed_id = $2",
-      [buyerId, seedId]
-    );
-
-    if (existing.rows.length > 0) {
-      return res.status(409).json({ exists: true, error: "This seed is already in your collection" });
-    }
-
-    res.json({ exists: false, message: "Valid seed" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
