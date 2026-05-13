@@ -140,17 +140,13 @@ const BuyerDashboard = () => {
   const [pendingSeedIdToUuid, setPendingSeedIdToUuid] = useState<Record<string, string>>({});
   const [pendingAssignedUuids, setPendingAssignedUuids] = useState<Set<string>>(new Set());
 
-  // Load favorites from localStorage
+  // Load favorites from DB — persists across devices and cache clears
   useEffect(() => {
-    const stored = localStorage.getItem(FAVORITES_KEY);
-    if (stored) {
-      try {
-        setFavorites(JSON.parse(stored));
-      } catch {
-        setFavorites([]);
-      }
-    }
-  }, []);
+    if (!user) return;
+    api.getFavorites().then(({ data }) => {
+      if (data) setFavorites(data as SeedPassport[]);
+    });
+  }, [user]);
 
   useEffect(() => {
     try {
@@ -161,20 +157,25 @@ const BuyerDashboard = () => {
     }
   }, []);
 
-  // Save favorites to localStorage
+  // Save favorites to DB
   const saveFavorites = (newFavorites: SeedPassport[]) => {
     setFavorites(newFavorites);
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(newFavorites));
+    // localStorage kept as fallback only — DB is source of truth
+    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(newFavorites)); } catch {}
   };
 
   const isFavorite = (seedId: string) => favorites.some(f => f.seed_id === seedId);
 
-  const toggleFavorite = (seed: SeedPassport) => {
+  const toggleFavorite = async (seed: SeedPassport) => {
     if (isFavorite(seed.seed_id)) {
-      saveFavorites(favorites.filter(f => f.seed_id !== seed.seed_id));
+      // Optimistic update
+      setFavorites(prev => prev.filter(f => f.seed_id !== seed.seed_id));
+      await api.removeFavorite(seed.seed_id);
       toast.success("Removed from favorites");
     } else {
-      saveFavorites([...favorites, seed]);
+      // Optimistic update
+      setFavorites(prev => [...prev, seed]);
+      await api.addFavorite(seed.seed_id);
       toast.success("Added to favorites!");
     }
   };
@@ -1022,27 +1023,20 @@ const BuyerDashboard = () => {
             <div className="max-w-md mx-auto animate-fade-in space-y-5">
               <div className="text-center">
                 <h2 className="text-xl font-semibold text-foreground mb-1">Scan Your Product</h2>
-                <p className="text-sm text-muted-foreground">
-                  Point at a QR code or barcode on the seed bag
-                </p>
+                <p className="text-sm text-muted-foreground">Point at a QR code or barcode on the seed bag</p>
               </div>
 
-              {/* Camera — shown directly, no extra click needed */}
               <div className="rounded-2xl overflow-hidden border border-border bg-muted/30">
                 <WebScanner onScan={handleWebScan} />
               </div>
 
-              {/* Divider */}
               <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-border" />
-                </div>
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
                 <div className="relative flex justify-center">
                   <span className="bg-background px-4 text-sm text-muted-foreground">or enter ID manually</span>
                 </div>
               </div>
 
-              {/* Manual input */}
               <div className="space-y-3">
                 <Input
                   placeholder="e.g., SEED-ABC123"
@@ -1051,23 +1045,11 @@ const BuyerDashboard = () => {
                   onKeyDown={(e) => e.key === "Enter" && handleScanProduct()}
                   className="text-center font-mono"
                 />
-                <Button
-                  onClick={handleScanProduct}
-                  size="lg"
-                  className="w-full"
-                  disabled={isScanning || !scanInput.trim()}
-                >
-                  {isScanning ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Looking up...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4 mr-2" />
-                      View Passport
-                    </>
-                  )}
+                <Button onClick={handleScanProduct} size="lg" className="w-full" disabled={isScanning || !scanInput.trim()}>
+                  {isScanning
+                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Looking up...</>
+                    : <><Search className="w-4 h-4 mr-2" />View Passport</>
+                  }
                 </Button>
               </div>
             </div>

@@ -193,7 +193,7 @@ const AddPlant = () => {
   };
 
   const canProceed = () => {
-    if (currentStep === 1) return formData.id.trim() !== "";
+    if (currentStep === 1) return idConfirmed;
     if (currentStep === 4) return formData.name.trim() !== "" && formData.quantity.trim() !== "";
     return true;
   };

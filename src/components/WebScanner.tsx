@@ -57,7 +57,6 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
 
       const scanner = new Html5Qrcode(scannerIdRef.current, {
         verbose: false,
-        // Only the formats we actually use — keeps it fast
         formatsToSupport: [
           Html5QrcodeSupportedFormats.QR_CODE,
           Html5QrcodeSupportedFormats.CODE_128,
@@ -69,24 +68,30 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
 
       scannerRef.current = scanner;
 
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
-        (decoded) => {
-          stopScanner();
-          onScan(extractId(decoded));
-        },
-        () => {} // scan miss — silent
-      );
+      // Try back camera first, fall back to any camera if rejected
+      const startCamera = async (facingMode: any) => {
+        await scanner.start(
+          { facingMode },
+          { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
+          (decoded) => {
+            stopScanner();
+            onScan(extractId(decoded));
+          },
+          () => {}
+        );
+      };
+
+      try {
+        await startCamera({ ideal: "environment" });
+      } catch {
+        // Some Android phones reject "environment" — fall back to any camera
+        await startCamera("user");
+      }
 
       if (mountedRef.current) setScanning(true);
 
-      // iOS Safari: ensure playsinline
       const video = document.querySelector(`#${scannerIdRef.current} video`) as HTMLVideoElement;
-      if (video) {
-        video.setAttribute("playsinline", "true");
-        video.muted = true;
-      }
+      if (video) { video.setAttribute("playsinline", "true"); video.muted = true; }
     } catch (err: any) {
       const msg = err?.message || "";
       if (msg.includes("Permission") || msg.includes("NotAllowed")) {
