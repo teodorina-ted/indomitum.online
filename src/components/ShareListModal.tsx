@@ -3,9 +3,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Send, FileText, Table, Code, Loader2, CheckCircle2 } from "lucide-react";
+import { Send, FileText, Table, Code, Loader2, CheckCircle2 } from "lucide-react"; // kept for v2.1
 import { toast } from "sonner";
-import { api } from "@/lib/api"; // v2.1: used for createBuyerOrder
+import { api } from "@/lib/api"; // kept for v2.1 handleSend
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -20,13 +20,15 @@ export const ShareListModal = ({ open, onOpenChange, seeds, onOrderSent }: Share
   const [notes, setNotes] = useState("");
   const [address, setAddress] = useState("");
   const [sending, setSending] = useState(false); // v2.1
-  const [sent, setSent] = useState(false);       // v2.1
+  const [sent, setSent] = useState(false);        // v2.1
 
-  // Per-item quantities — buyer sets how many they want
+  // Per-item quantities — number input so users can type 1000 directly
   const [quantities, setQuantities] = useState<Record<string, number>>({});
-  const getQty = (s: any) => quantities[s.seed_id || s.id] ?? 1;
-  const setQty = (s: any, val: number) =>
-    setQuantities(q => ({ ...q, [s.seed_id || s.id]: Math.max(1, val) }));
+  const getQty = (s: any): number => quantities[s.seed_id || s.id] ?? 1;
+  const setQty = (s: any, val: string) => {
+    const n = parseInt(val);
+    setQuantities(q => ({ ...q, [s.seed_id || s.id]: isNaN(n) || n < 1 ? 1 : n }));
+  };
 
   // ── v2.1: uncomment to enable direct order sending ──────────────────────
   // const handleSend = async () => {
@@ -55,7 +57,6 @@ export const ShareListModal = ({ open, onOpenChange, seeds, onOrderSent }: Share
     doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 30);
     if (address) doc.text(`Delivery: ${address}`, 14, 37);
     if (notes) doc.text(`Notes: ${notes}`, 14, 44);
-
     autoTable(doc, {
       startY: address || notes ? 52 : 38,
       head: [["Seed ID", "Name", "Qty"]],
@@ -63,7 +64,6 @@ export const ShareListModal = ({ open, onOpenChange, seeds, onOrderSent }: Share
       theme: "striped",
       headStyles: { fillColor: [45, 80, 22] },
     });
-
     doc.save("indomitum-order.pdf");
     toast.success("PDF downloaded!");
   };
@@ -79,7 +79,12 @@ export const ShareListModal = ({ open, onOpenChange, seeds, onOrderSent }: Share
   };
 
   const exportJSON = () => {
-    const data = { date: new Date().toISOString(), delivery_address: address, notes, items: seeds.map(s => ({ ...s, quantity: getQty(s) })) };
+    const data = {
+      date: new Date().toISOString(),
+      delivery_address: address,
+      notes,
+      items: seeds.map(s => ({ ...s, quantity: getQty(s) })),
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "indomitum-order.json"; a.click();
@@ -94,7 +99,7 @@ export const ShareListModal = ({ open, onOpenChange, seeds, onOrderSent }: Share
           <DialogTitle>Share List ({seeds.length} seeds)</DialogTitle>
         </DialogHeader>
 
-        {/* v2.1: swap back to sent success screen when order sending is live
+        {/* v2.1: swap back when order flow is live
         {sent ? (
           <div className="text-center py-6 space-y-3">
             <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto" />
@@ -104,22 +109,19 @@ export const ShareListModal = ({ open, onOpenChange, seeds, onOrderSent }: Share
           </div>
         ) : ( */}
           <div className="space-y-4">
-            {/* Seeds summary with editable quantities */}
-            <div className="bg-muted/30 rounded-xl p-3 max-h-48 overflow-y-auto space-y-2">
+
+            {/* Seeds with quantity number inputs */}
+            <div className="bg-muted/30 rounded-xl p-3 max-h-52 overflow-y-auto space-y-2">
               {seeds.map((s, i) => (
-                <div key={i} className="flex items-center justify-between gap-3 text-sm">
+                <div key={i} className="flex items-center gap-3 text-sm">
                   <span className="font-medium flex-1 truncate">{s.name || s.seed_id}</span>
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={() => setQty(s, getQty(s) - 1)}
-                      className="w-6 h-6 rounded-full bg-muted hover:bg-muted-foreground/20 flex items-center justify-center font-bold text-base leading-none"
-                    >−</button>
-                    <span className="w-6 text-center font-mono text-sm">{getQty(s)}</span>
-                    <button
-                      onClick={() => setQty(s, getQty(s) + 1)}
-                      className="w-6 h-6 rounded-full bg-muted hover:bg-muted-foreground/20 flex items-center justify-center font-bold text-base leading-none"
-                    >+</button>
-                  </div>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={getQty(s)}
+                    onChange={e => setQty(s, e.target.value)}
+                    className="w-20 h-8 text-center font-mono text-sm"
+                  />
                 </div>
               ))}
             </div>
@@ -127,7 +129,7 @@ export const ShareListModal = ({ open, onOpenChange, seeds, onOrderSent }: Share
             <Input placeholder="Delivery address (optional)" value={address} onChange={e => setAddress(e.target.value)} />
             <Textarea placeholder="Notes for the collector (optional)" rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
 
-            {/* v2.1: replace this banner with the Send button below when order flow is ready */}
+            {/* v2.1 Coming Soon banner — replace with Send button when ready */}
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-center space-y-1">
               <p className="text-sm font-semibold text-primary">🚀 Direct ordering — coming in v2.1</p>
               <p className="text-xs text-muted-foreground">
@@ -136,30 +138,26 @@ export const ShareListModal = ({ open, onOpenChange, seeds, onOrderSent }: Share
               </p>
             </div>
 
-            {/* v2.1: uncomment Send button when handleSend is live
+            {/* v2.1: uncomment when handleSend is active
             <Button className="w-full" onClick={handleSend} disabled={sending}>
               {sending
-                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</>
-                : <><Send className="w-4 h-4 mr-2" /> Send to Collector</>
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Sending...</>
+                : <><Send className="w-4 h-4 mr-2" />Send to Collector</>
               }
             </Button>
             */}
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
-              <div className="relative flex justify-center text-xs uppercase"><span className="bg-background px-2 text-muted-foreground">export locally</span></div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">export locally</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-              <Button variant="outline" size="sm" onClick={exportPDF}>
-                <FileText className="w-3 h-3 mr-1" /> PDF
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportCSV}>
-                <Table className="w-3 h-3 mr-1" /> CSV
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportJSON}>
-                <Code className="w-3 h-3 mr-1" /> JSON
-              </Button>
+              <Button variant="outline" size="sm" onClick={exportPDF}><FileText className="w-3 h-3 mr-1" /> PDF</Button>
+              <Button variant="outline" size="sm" onClick={exportCSV}><Table className="w-3 h-3 mr-1" /> CSV</Button>
+              <Button variant="outline" size="sm" onClick={exportJSON}><Code className="w-3 h-3 mr-1" /> JSON</Button>
             </div>
           </div>
         {/* )} */}
