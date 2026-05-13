@@ -24,7 +24,7 @@ import {
   Camera,
   MapPin,
   ExternalLink,
-
+  ScanLine,
   Plus,
   Send,
   ShoppingBag,
@@ -152,28 +152,17 @@ const BuyerDashboard = () => {
     try {
       const completed = localStorage.getItem(tourStorageKey) === "true";
       if (!completed) setTourOpen(true);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
-
-  // Save favorites to DB
-  const saveFavorites = (newFavorites: SeedPassport[]) => {
-    setFavorites(newFavorites);
-    // localStorage kept as fallback only — DB is source of truth
-    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(newFavorites)); } catch {}
-  };
 
   const isFavorite = (seedId: string) => favorites.some(f => f.seed_id === seedId);
 
   const toggleFavorite = async (seed: SeedPassport) => {
     if (isFavorite(seed.seed_id)) {
-      // Optimistic update
       setFavorites(prev => prev.filter(f => f.seed_id !== seed.seed_id));
       await api.removeFavorite(seed.seed_id);
       toast.success("Removed from favorites");
     } else {
-      // Optimistic update
       setFavorites(prev => [...prev, seed]);
       await api.addFavorite(seed.seed_id);
       toast.success("Added to favorites!");
@@ -224,18 +213,12 @@ const BuyerDashboard = () => {
     setIsScanning(false);
 
     if (error) {
-      if (error.includes("401") || error.includes("Unauthorized") || error.includes("token")) {
-        toast.error("Session expired — please log out and back in.");
-      } else if (error.includes("Network") || error.includes("fetch")) {
-        toast.error("No connection. Check your internet and try again.");
-      } else {
-        toast.error("Could not look up product. Try again.");
-      }
+      toast.error("Failed to look up product");
       return;
     }
 
     if (!data) {
-      toast.error("Product not found. Make sure you scanned the right bag.");
+      toast.error("Product not found. Check the ID and try again.");
       return;
     }
 
@@ -246,14 +229,10 @@ const BuyerDashboard = () => {
   };
 
   const handleScanProduct = () => lookupSeed(scanInput);
-
   const handleWebScan = async (result: string) => {
     let seedId = result.trim();
-    if (seedId.includes("/passport/")) {
-      seedId = decodeURIComponent(seedId.split("/passport/").pop()?.split("?")[0] || seedId);
-    } else if (seedId.startsWith("http")) {
-      try { const parts = new URL(seedId).pathname.split("/").filter(Boolean); seedId = parts[parts.length - 1] || seedId; } catch {}
-    }
+    if (seedId.includes("/passport/")) seedId = decodeURIComponent(seedId.split("/passport/").pop()?.split("?")[0] || seedId);
+    else if (seedId.startsWith("http")) { try { const p = new URL(seedId).pathname.split("/").filter(Boolean); seedId = p[p.length-1] || seedId; } catch {} }
     await lookupSeed(seedId);
   };
 
@@ -929,6 +908,7 @@ const BuyerDashboard = () => {
             >
               <MapPin className="w-5 h-5" />
               Tracking
+              <span className="ml-auto text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">v2.1</span>
             </Link>
             <Link
               to="/buyer/orders"
@@ -937,6 +917,7 @@ const BuyerDashboard = () => {
             >
               <ShoppingBag className="w-5 h-5" />
               Order History
+              <span className="ml-auto text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">v2.1</span>
             </Link>
             <Link
               to="/buyer/bin"
@@ -1025,18 +1006,15 @@ const BuyerDashboard = () => {
                 <h2 className="text-xl font-semibold text-foreground mb-1">Scan Your Product</h2>
                 <p className="text-sm text-muted-foreground">Point at a QR code or barcode on the seed bag</p>
               </div>
-
               <div className="rounded-2xl overflow-hidden border border-border bg-muted/30">
                 <WebScanner onScan={handleWebScan} />
               </div>
-
               <div className="relative">
                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
                 <div className="relative flex justify-center">
                   <span className="bg-background px-4 text-sm text-muted-foreground">or enter ID manually</span>
                 </div>
               </div>
-
               <div className="space-y-3">
                 <Input
                   placeholder="e.g., SEED-ABC123"

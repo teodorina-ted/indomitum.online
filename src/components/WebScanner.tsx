@@ -7,7 +7,6 @@ import { toast } from "sonner";
 interface WebScannerProps {
   onScan: (result: string) => void;
   className?: string;
-  autoStart?: boolean;
 }
 
 const extractId = (raw: string): string => {
@@ -21,7 +20,6 @@ const extractId = (raw: string): string => {
   return raw.trim();
 };
 
-// Unique ID per instance so multiple scanners on the same page don't conflict
 let instanceCounter = 0;
 
 const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
@@ -65,41 +63,34 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
           Html5QrcodeSupportedFormats.DATA_MATRIX,
         ],
       });
-
       scannerRef.current = scanner;
 
-      // Try back camera first, fall back to any camera if rejected
-      const startCamera = async (facingMode: any) => {
-        await scanner.start(
-          { facingMode },
-          { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 },
-          (decoded) => {
-            stopScanner();
-            onScan(extractId(decoded));
-          },
-          () => {}
-        );
-      };
+      const config = { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1.0 };
+      const onSuccess = (decoded: string) => { stopScanner(); onScan(extractId(decoded)); };
+      const onFail = () => {};
 
+      // Try back camera, fall back to any available camera
       try {
-        await startCamera({ ideal: "environment" });
+        await scanner.start({ facingMode: { ideal: "environment" } }, config, onSuccess, onFail);
       } catch {
-        // Some Android phones reject "environment" — fall back to any camera
-        await startCamera("user");
+        await scanner.start({ facingMode: "user" }, config, onSuccess, onFail);
       }
 
       if (mountedRef.current) setScanning(true);
 
+      // iOS Safari fix
       const video = document.querySelector(`#${scannerIdRef.current} video`) as HTMLVideoElement;
       if (video) { video.setAttribute("playsinline", "true"); video.muted = true; }
+
     } catch (err: any) {
       const msg = err?.message || "";
       if (msg.includes("Permission") || msg.includes("NotAllowed")) {
-        toast.error("Camera permission denied. Please allow camera access.");
-      } else if (msg.includes("NotFound")) {
+        toast.error("Camera permission denied. Allow camera access in your browser settings.");
+      } else if (msg.includes("NotFound") || msg.includes("Requested device not found")) {
         toast.error("No camera found on this device.");
       } else {
-        toast.error("Could not start camera. Try again.");
+        toast.error("Could not start camera. Make sure no other app is using it.");
+        console.error("Scanner error:", err);
       }
     } finally {
       if (mountedRef.current) setStarting(false);
@@ -108,30 +99,27 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
 
   return (
     <div className={className}>
-      {/* Scanner viewport — collapses to 0 when not scanning */}
       <div
         id={scannerIdRef.current}
         className={`w-full max-w-xs mx-auto rounded-2xl overflow-hidden bg-black transition-all duration-300 ${
-          scanning ? "h-64 mb-3" : "h-0 overflow-hidden"
+          scanning ? "h-64 mb-3" : "h-0"
         }`}
       />
-
       {scanning && (
         <p className="text-center text-sm text-muted-foreground mb-3">
-          Point at QR code or barcode on the bag
+          Point at the QR code or barcode
         </p>
       )}
-
       {!scanning ? (
         <Button onClick={startScanner} size="lg" className="w-full" disabled={starting}>
           {starting
-            ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Starting…</>
+            ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Starting camera…</>
             : <><Camera className="w-4 h-4 mr-2" />Scan with Camera</>
           }
         </Button>
       ) : (
         <Button onClick={stopScanner} size="lg" variant="outline" className="w-full">
-          <StopCircle className="w-4 h-4 mr-2" />Stop Scanning
+          <StopCircle className="w-4 h-4 mr-2" />Stop Camera
         </Button>
       )}
     </div>
