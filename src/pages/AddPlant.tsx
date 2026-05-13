@@ -56,6 +56,7 @@ const AddPlant = () => {
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
+  const [idConfirmed, setIdConfirmed] = useState(false);
 
   const [formData, setFormData] = useState({
     id: "",
@@ -77,6 +78,7 @@ const AddPlant = () => {
       if (data) {
         toast.error("This ID is already registered! Use a different ID.");
         setFormData(p => ({ ...p, id: "" }));
+        setIdConfirmed(false);
         setCurrentStep(1);
         return false;
       }
@@ -88,6 +90,7 @@ const AddPlant = () => {
     const isValid = await validateDuplicateId(result);
     if (isValid) {
       setFormData(p => ({ ...p, id: result }));
+      setIdConfirmed(true);
       toast.success("Code scanned!");
     }
   };
@@ -173,6 +176,7 @@ const AddPlant = () => {
         if (error.includes("already exists")) {
           toast.error("This ID is already in use — scan a different bag.", { duration: 5000 });
           setFormData(p => ({ ...p, id: "" }));
+          setIdConfirmed(false);
           setCurrentStep(1);
           return;
         }
@@ -241,12 +245,12 @@ const AddPlant = () => {
               <h2 className="text-2xl font-bold mb-2">Scan Bag ID</h2>
               <p className="text-muted-foreground">Scan a QR code or enter the ID manually.</p>
             </div>
-            {/* Scanner — always mounted, hidden via CSS once ID captured to avoid remount glitch */}
-            <div style={{ display: formData.id ? "none" : "block" }}>
+            {/* Scanner — hidden once ID is confirmed (scan or manual confirm) */}
+            <div style={{ display: idConfirmed ? "none" : "block" }}>
               <WebScanner onScan={handleWebScan} />
             </div>
 
-            {formData.id ? (
+            {idConfirmed ? (
               <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/20 rounded-xl">
                 <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
                   <Check className="w-5 h-5 text-primary-foreground" />
@@ -255,7 +259,7 @@ const AddPlant = () => {
                   <p className="text-sm font-medium text-primary">ID Captured</p>
                   <p className="font-mono text-sm text-foreground">{formData.id}</p>
                 </div>
-                <button onClick={() => setFormData(p => ({ ...p, id: "" }))} className="text-muted-foreground hover:text-foreground p-1">
+                <button onClick={() => { setFormData(p => ({ ...p, id: "" })); setIdConfirmed(false); }} className="text-muted-foreground hover:text-foreground p-1">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -267,10 +271,28 @@ const AddPlant = () => {
                     <span className="bg-background px-2 text-muted-foreground">or enter manually</span>
                   </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Bag ID</label>
-                  <Input placeholder="e.g., SEED-ABC123" value={formData.id}
-                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))} />
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="e.g., SEED-ABC123"
+                    value={formData.id}
+                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))}
+                    onKeyDown={async e => {
+                      if (e.key === "Enter" && formData.id.trim()) {
+                        const valid = await validateDuplicateId(formData.id.trim());
+                        if (valid) setIdConfirmed(true);
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={!formData.id.trim()}
+                    onClick={async () => {
+                      const valid = await validateDuplicateId(formData.id.trim());
+                      if (valid) setIdConfirmed(true);
+                    }}
+                  >
+                    Confirm
+                  </Button>
                 </div>
               </>
             )}
@@ -366,8 +388,12 @@ const AddPlant = () => {
             <Button className="flex-1" disabled={!canProceed()}
               onClick={async () => {
                 if (currentStep === 1) {
-                  const valid = await validateDuplicateId(formData.id);
-                  if (!valid) return;
+                  if (!idConfirmed) {
+                    // manual entry path — confirm first
+                    const valid = await validateDuplicateId(formData.id);
+                    if (!valid) return;
+                    setIdConfirmed(true);
+                  }
                 }
                 setCurrentStep((currentStep + 1) as Step);
               }}>
