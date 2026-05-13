@@ -276,7 +276,8 @@ const Tracking = () => {
               className="pl-10"
             />
           </div>
-          {isBuyer && (
+          {/* Order requests are placed from the buyer dashboard (Send Order button) */}
+          {false && (
             <Dialog open={newOrderOpen} onOpenChange={setNewOrderOpen}>
               <DialogTrigger asChild>
                 <Button>

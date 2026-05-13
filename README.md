@@ -1,126 +1,92 @@
-# 🌱 Indomitum
+# Indomitum — Digital Plant Passport Platform
 
-> *"Indomitum"* — Latin for untamed, wild, unconquered. Just like the plants we track.
-
-A seed collection CRM built for the field. Scan, track, and share plant passports — from the dirt to the database.
-
----
-
-## What it does
-
-**For Collectors** (the people knee-deep in soil):
-- Add plants by scanning their bag QR/barcode in the field
-- Attach GPS coordinates, photos, and notes
-- Generate printable barcodes and QR codes for each bag
-- Manage orders from buyers
-- Track everything in a clean dashboard
-
-**For Buyers** (the people who want the plants):
-- Scan a QR code to view a plant's full passport
-- Save seeds to a wishlist
-- Place orders and track shipping
-
----
+Live: [indomitum.online](https://indomitum.online)
 
 ## Stack
+- **Frontend**: React + TypeScript + Vite, deployed on Railway
+- **Backend**: Node.js / Express, deployed on Railway
+- **Database**: PostgreSQL (Railway managed)
+- **Auth**: JWT (stored in localStorage)
 
-| Layer | Tech |
-|-------|------|
-| Frontend | React 18 + TypeScript + Vite + Tailwind + shadcn/ui |
-| Backend | Node.js + Express |
-| Database | PostgreSQL |
-| Auth | JWT |
-| Email | Resend |
-| Infra | Docker + Railway |
-| DNS | Cloudflare |
-| QR Scanning | Html5Qrcode + native BarcodeDetector API |
+## Architecture
+```
+frontend/          React app (Vite)
+api/index.js       Express REST API
+db/init.sql        Initial schema
+db/migrate_v2.sql  v2 migrations
+```
+
+## Roles
+- **Collector** — manages seed inventory, views incoming orders, updates order status, generates QR/barcodes
+- **Buyer** — scans products, builds a list, sends orders, tracks fulfillment
 
 ---
 
-## Getting started
+## v2.1 Changes
 
-### Prerequisites
-- Node.js 20+
-- PostgreSQL
-- A Resend account (for emails)
+### Bug Fixes
+- **Single-char input fixed** — `WebScanner` (`html5-qrcode`) is no longer auto-mounted in the Scan tab. It only mounts when the user clicks "Start Camera", which eliminates the focus-steal that caused the input to reset after the first character.
+- **Favorites persist across sessions** — Favorites now read from and write to the backend DB (`/buyer/favorites`) instead of `localStorage`. No data loss on refresh, cleared cache, or different devices.
+- **Scanner works from all phones** — camera now starts with `{ facingMode: { ideal: "environment" } }` (non-strict) and falls back to `{}` (any camera) on failure. Fixes `OverconstrainedError` on Samsung/Xiaomi/other Android devices. Errors are surfaced clearly to the user.
 
-### Local setup
+### UX Fixes
+- **Duplicate Scan removed** — the "Scan with camera" secondary button in My Seeds toolbar was removed. Only one Scan entry exists: the sidebar nav item.
+- **Qty input replaced** — `+/-` buttons in `ShareListModal` replaced with `<input type="number">`. Users can type `1000` directly.
+- **New Order from Tracking removed** — the "New Order Request" button/dialog visible to buyers inside Tracking has been removed. Order creation is only from the buyer dashboard "Send Order" button → `ShareListModal`.
+- **Export de-duplicated** — the always-visible Export icon button in the My Seeds toolbar is removed. Export only appears in the "selected" bar when at least one seed is checked.
+- **Selected row highlight** — checked rows now show a subtle `bg-primary/5` tint so it's clear which are selected vs which aren't.
 
+### New Features
+- **Collector Orders page** (`/dashboard/orders`) — lists all incoming buyer orders with status badges, buyer details, and order items. Collector can update status (Requested → Invoice Sent → Confirmed → Preparing → Shipped → Delivered → Completed) and add tracking codes.
+- **Orders badge in collector sidebar** — red circle badge shows count of new (status: `requested`) orders, just like an email notification. Auto-fetches on load.
+- **Buyer Orders in sidebar** — "Orders" is now a distinct sidebar item in the buyer nav (previously "Order History"). Links to `/buyer/orders`.
+
+### New Files
+| File | Purpose |
+|------|---------|
+| `src/pages/CollectorOrders.tsx` | New collector orders management page |
+| `src/lib/escapeHtml.ts` | XSS-safe HTML escaping utility (used in print/PDF views) |
+
+### Modified Files
+| File | What changed |
+|------|-------------|
+| `src/components/WebScanner.tsx` | Camera fallback, lazy mount, better error messages |
+| `src/components/ShareListModal.tsx` | Number input for qty, live Send Order button |
+| `src/pages/BuyerDashboard.tsx` | Favorites→DB, remove duplicate Scan btn, export fix, row highlight |
+| `src/pages/Tracking.tsx` | Removed buyer "New Order Request" block |
+| `src/pages/Dashboard.tsx` | Orders nav link + red badge, newOrdersCount state |
+| `src/App.tsx` | Added `/dashboard/orders` route |
+
+---
+
+## Environment Variables
+
+### Frontend
+```
+VITE_API_URL=https://your-backend.railway.app
+```
+
+### Backend
+```
+DATABASE_URL=postgresql://...
+JWT_SECRET=...
+PORT=3000
+```
+
+---
+
+## Local Development
 ```bash
-git clone https://github.com/teodorina-ted/indomitum.online
-cd indomitum.online
-
 # Frontend
+cd frontend
 npm install
-cp .env.example .env
-# Set VITE_API_URL=http://localhost:3000
 npm run dev
 
 # Backend
 cd api
 npm install
-cp .env.example .env
-# Set DATABASE_URL, JWT_SECRET, RESEND_API_KEY
 node index.js
 ```
 
-### Environment variables
-
-**Frontend (`.env`)**
-```
-VITE_API_URL=https://indomitum.up.railway.app
-```
-
-**Backend (`api/.env`)**
-```
-DATABASE_URL=postgresql://...
-JWT_SECRET=your-secret-here
-RESEND_API_KEY=re_...
-APP_URL=https://indomitum.online
-PORT=3000
-CORS_ORIGIN=https://indomitum.online,https://indomitum-online.up.railway.app
-```
-
----
-
-## Roles
-
-| Role | Can do |
-|------|--------|
-| `collector` | Add/manage seeds, handle orders, generate QR codes |
-| `buyer` | Scan QR codes, view passports, save seeds, place orders |
-| `admin` | Everything |
-
----
-
-## Deployment
-
-Deployed on [Railway](https://railway.app) with two services:
-- **front** — nginx serving the React SPA
-- **back** — Node.js API
-
-Auto-deploys on push to `main`. Domain managed via Cloudflare.
-
----
-
-## Features
-
-- 📱 Mobile-first PWA — installable on any device
-- 🔍 Live QR/barcode scanner (mobile) + manual entry (desktop)
-- 🗺️ GPS location capture with address lookup
-- 📸 Photo upload with base64 storage
-- 📧 Email verification on signup
-- 🌍 Multi-language support (EN, IT, ES, FR, DE)
-- 🌙 Dark mode
-- 🏷️ Printable bag labels with QR codes
-- ♻️ Recycle bin — delete and restore seeds
-
----
-
-## License
-
-MIT — use it, fork it, plant it.
-
----
-
-*Built with too much coffee and not enough sleep.* ☕
+## Deploy (Railway)
+Both frontend and backend are separate Railway services. Push to `main` triggers auto-deploy.
