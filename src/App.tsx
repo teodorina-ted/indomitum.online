@@ -54,7 +54,7 @@ const App = () => (
               <Route path="/buyer/orders" element={<ComingSoon title="Order History" description="Your full order history with status updates and delivery confirmations. Coming in v2.1." backTo="/buyer" />} />
               <Route path="/dashboard/settings" element={<Settings />} />
               <Route path="/buyer" element={<BuyerDashboard />} />
-              <Route path="/buyer/tracking" element={<Tracking />} />
+
               <Route path="/buyer/settings" element={<Settings />} />
               <Route path="/passport/:seedId" element={<SeedPassport />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
