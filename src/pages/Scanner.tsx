@@ -58,9 +58,9 @@ const Scanner = () => {
       await stopScanner();
 
       scannerRef.current = new Html5Qrcode("buyer-scanner-container", {
-        verbose: false,
-        formatsToSupport: undefined, // all formats
-      });
+  verbose: false,
+  formatsToSupport: undefined, // all formats
+});
 
       const config = { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1 };
       const onSuccess = (decodedText: string) => { stopScanner(); toast.success("Code scanned!"); goToPassport(decodedText); };
