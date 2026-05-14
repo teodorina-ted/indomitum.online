@@ -216,15 +216,15 @@ const Dashboard = () => {
         return;
       }
 
-    const map: Record<string, string> = {};
-      (Array.isArray(data) ? data : []).forEach((p: any) => {
-      if (p.user_id) map[p.user_id] = p.full_name;
+      const map: Record<string, string> = {};
+      (data || []).forEach((p: any) => {
+        if (p.user_id) map[p.user_id] = p.full_name;
       });
       setProfilesByUserId(map);
-     };
+    };
 
-      if (seeds.length) loadNames();
-    }, [seeds]);
+    if (seeds.length) loadNames();
+  }, [seeds]);
 
   // Handle column resize
   const handleResizeStart = (e: React.MouseEvent, columnId: string) => {
