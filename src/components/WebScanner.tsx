@@ -45,21 +45,19 @@ const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerPro
     setIsStarting(true);
 
     try {
+      // Clean up any existing scanner
       await stopScanner();
 
+      // Create new scanner instance
       scannerRef.current = new Html5Qrcode(containerIdRef.current, {
         verbose: false,
       });
 
-      const config = {
-        fps: 15,
-        qrbox: { width: 220, height: 220 },
-        aspectRatio: 1,
-      };
+      // Request camera and start scanning — try back camera, fall back to any
+      const config = { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1 };
       const onSuccess = (decodedText: string) => { stopScanner(); onScan(decodedText); };
       const onFail = () => {};
 
-      // Try back camera first, fall back to any camera for devices that reject "environment"
       try {
         await scannerRef.current.start({ facingMode: { ideal: "environment" } }, config, onSuccess, onFail);
       } catch {
@@ -68,6 +66,7 @@ const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerPro
 
       setIsScanning(true);
 
+      // iOS Safari fix: ensure video has playsinline and muted
       const videoElement = containerRef.current?.querySelector("video");
       if (videoElement) {
         videoElement.setAttribute("playsinline", "true");
@@ -102,30 +101,38 @@ const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerPro
       <div
         id={containerIdRef.current}
         ref={containerRef}
-        className="w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden bg-muted/30 border-2 border-dashed border-border"
-        style={{ minHeight: isScanning ? "250px" : "0" }}
-      />
+        className="w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden bg-muted/30 border-2 border-dashed border-border relative"
+      >
+        {/* Placeholder shown when not scanning */}
+        {!isScanning && !isStarting && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <Camera className="w-10 h-10 text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground">
+              Available on mobile & tablet.<br />
+              Tap below to start camera.
+            </p>
+          </div>
+        )}
+        {isStarting && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        )}
+      </div>
 
-      {/* Controls */}
+      {/* Single button below box */}
       <div className="flex justify-center mt-4">
         {!isScanning ? (
           <Button onClick={startScanner} size="lg" disabled={isStarting}>
             {isStarting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Starting...
-              </>
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Starting...</>
             ) : (
-              <>
-                <Camera className="w-4 h-4 mr-2" />
-                Scan with Camera
-              </>
+              <><Camera className="w-4 h-4 mr-2" />Scan with Camera</>
             )}
           </Button>
         ) : (
-          <Button onClick={stopScanner} variant="destructive" size="lg">
-            <StopCircle className="w-4 h-4 mr-2" />
-            Stop Scanner
+          <Button onClick={stopScanner} variant="outline" size="lg">
+            <StopCircle className="w-4 h-4 mr-2" />Stop Scanner
           </Button>
         )}
       </div>

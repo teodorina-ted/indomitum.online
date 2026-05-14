@@ -97,6 +97,7 @@ const Dashboard = () => {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [newOrdersCount, setNewOrdersCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSeeds, setSelectedSeeds] = useState<string[]>([]);
   const [sortField, setSortField] = useState<SortField>("created_at");
@@ -196,6 +197,14 @@ const Dashboard = () => {
 
     if (user) fetchSeeds();
   }, [user]);
+
+  useEffect(() => {
+    if (!user || !isCollector) return;
+    api.getCollectorOrders().then(({ data }) => {
+      if (data) setNewOrdersCount(data.filter((o: any) => o.status === "requested").length);
+    });
+  }, [user, isCollector]);
+
 
   // Fetch "added by" names for the currently loaded seeds
   useEffect(() => {
@@ -904,6 +913,28 @@ const Dashboard = () => {
             </Link>
           )}
           <Link
+                to="/dashboard/orders"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors ${sidebarCollapsed ? "justify-center" : ""}`}
+                title="Orders"
+              >
+                <div className="relative flex-shrink-0">
+                  <ShoppingBag className="w-5 h-5" />
+                  {newOrdersCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
+                      {newOrdersCount > 9 ? "9+" : newOrdersCount}
+                    </span>
+                  )}
+                </div>
+                {!sidebarCollapsed && (
+                  <span className="flex items-center gap-2">
+                    Orders
+                    {newOrdersCount > 0 && (
+                      <span className="text-xs bg-red-500 text-white px-1.5 py-0.5 rounded-full leading-none">{newOrdersCount}</span>
+                    )}
+                  </span>
+                )}
+              </Link>
+              <Link
             to="/dashboard/bin"
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors ${
               sidebarCollapsed ? "justify-center" : ""

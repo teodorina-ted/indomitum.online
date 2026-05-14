@@ -1,7 +1,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json bun.lock ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
 ARG VITE_API_URL=https://indomitum.up.railway.app
 ENV VITE_API_URL=$VITE_API_URL

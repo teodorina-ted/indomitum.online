@@ -16,8 +16,6 @@ const Scanner = () => {
 
   useEffect(() => {
     mountedRef.current = true;
-    // Auto-start camera — no tap needed
-    startScanner();
     return () => {
       mountedRef.current = false;
       stopScanner();
@@ -64,16 +62,15 @@ const Scanner = () => {
         formatsToSupport: undefined, // all formats
       });
 
-      await scannerRef.current.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 },
-        (decodedText) => {
-          stopScanner();
-          toast.success("Code scanned!");
-          goToPassport(decodedText);
-        },
-        () => {}
-      );
+      const config = { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1 };
+      const onSuccess = (decodedText: string) => { stopScanner(); toast.success("Code scanned!"); goToPassport(decodedText); };
+      const onFail = () => {};
+
+      try {
+        await scannerRef.current.start({ facingMode: { ideal: "environment" } }, config, onSuccess, onFail);
+      } catch {
+        await scannerRef.current.start({ facingMode: "user" }, config, onSuccess, onFail);
+      }
 
       if (mountedRef.current) setIsScanning(true);
 
@@ -125,30 +122,39 @@ const Scanner = () => {
         </div>
 
         {/* Scanner box */}
-        <div className="relative w-full max-w-sm mx-auto">
-          <div
-            id="buyer-scanner-container"
-            className="w-full aspect-square rounded-2xl overflow-hidden bg-muted border-2 border-border"
-            style={{ minHeight: "280px" }}
-          />
-          {/* Loading overlay while camera starts */}
+        <div className="relative w-full aspect-square max-w-sm mx-auto rounded-2xl overflow-hidden bg-muted border-2 border-dashed border-border">
+          <div id="buyer-scanner-container" className="w-full h-full" />
+
+          {/* Placeholder when not scanning */}
+          {!isScanning && !starting && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center pointer-events-none">
+              <Camera className="w-10 h-10 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">
+                Available on mobile & tablet.<br />Tap below to start camera.
+              </p>
+            </div>
+          )}
           {starting && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-2xl bg-muted">
-              <Camera className="h-10 w-10 text-muted-foreground animate-pulse" />
-              <p className="text-sm text-muted-foreground">Starting camera…</p>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
             </div>
           )}
         </div>
 
-        {/* Stop button — only shown once scanning */}
-        {isScanning && (
-          <div className="flex justify-center">
-            <Button onClick={stopScanner} variant="outline" size="lg" className="gap-2 w-full max-w-xs">
-              <StopCircle className="h-5 w-5" />
-              Stop Camera
+        {/* Single button */}
+        <div className="flex justify-center">
+          {!isScanning ? (
+            <Button onClick={startScanner} size="lg" className="w-full max-w-xs" disabled={starting}>
+              <Camera className="h-5 w-5 mr-2" />
+              {starting ? "Starting..." : "Scan with Camera"}
             </Button>
-          </div>
-        )}
+          ) : (
+            <Button onClick={stopScanner} variant="outline" size="lg" className="w-full max-w-xs">
+              <StopCircle className="h-5 w-5 mr-2" />
+              Stop Scanning
+            </Button>
+          )}
+        </div>
 
         {/* Divider */}
         <div className="relative">
@@ -178,15 +184,6 @@ const Scanner = () => {
           </Button>
         </div>
 
-        {/* Instructions */}
-        <div className="bg-muted/50 rounded-xl p-4">
-          <ul className="text-sm text-muted-foreground space-y-1.5">
-            <li>• Tap "Scan with Camera" to start the live scanner</li>
-            <li>• Point at the QR code or barcode on the seed bag</li>
-            <li>• The plant passport will open automatically</li>
-            <li>• You can then save it to your list or favorites</li>
-          </ul>
-        </div>
       </main>
     </div>
   );

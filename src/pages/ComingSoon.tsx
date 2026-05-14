@@ -8,7 +8,7 @@ interface ComingSoonProps {
   backTo?: string;
 }
 
-const ComingSoon = ({ title, description, backTo = "/" }: ComingSoonProps) => {
+const ComingSoon = ({ title, description, backTo = "/buyer" }: ComingSoonProps) => {
   const navigate = useNavigate();
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -20,7 +20,8 @@ const ComingSoon = ({ title, description, backTo = "/" }: ComingSoonProps) => {
           <h1 className="text-lg font-semibold">{title}</h1>
         </div>
       </header>
-      <div className="flex-1 flex items-center justify-center px-6">
+
+      <div className="flex-1 flex items-center justify-center px-4">
         <div className="text-center space-y-5 max-w-sm">
           <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
             <Rocket className="w-10 h-10 text-primary" />
