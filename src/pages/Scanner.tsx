@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Html5Qrcode } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Camera, StopCircle, Search, Leaf } from "lucide-react";
+import { ArrowLeft, Camera, StopCircle, Search, Leaf, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const Scanner = () => {
