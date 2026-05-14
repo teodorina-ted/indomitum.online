@@ -27,6 +27,7 @@ import VerifyEmail from "./pages/VerifyEmail";
 import ResetPassword from "./pages/ResetPassword";
 import BuyerOrders from "./pages/BuyerOrders";
 import BuyerBin from "./pages/BuyerBin";
+import ComingSoon from "./pages/ComingSoon";
 
 const queryClient = new QueryClient();
 
@@ -47,8 +48,10 @@ const App = () => (
               <Route path="/dashboard/add" element={<AddPlant />} />
               <Route path="/dashboard/bin" element={<RecycleBin />} />
               <Route path="/dashboard/history" element={<HistoryPage />} />
-              <Route path="/dashboard/tracking" element={<Tracking />} />
-              <Route path="/dashboard/settings" element={<Settings />} />
+              <Route path="/dashboard/tracking" element={<ComingSoon title="Order Tracking" description="Track your orders from confirmation through shipping to delivery. Coming in v2.1." backTo="/dashboard" />} />
+              <Route path="/dashboard/orders" element={<ComingSoon title="Orders" description="Manage incoming orders from buyers — review, edit quantities, update status and add tracking. Coming in v2.1." backTo="/dashboard" />} />
+              <Route path="/buyer/tracking" element={<ComingSoon title="Order Tracking" description="Track your orders in real time — from the collector confirming through shipping to delivery confirmation. Coming in v2.1." backTo="/buyer" />} />
+              <Route path="/buyer/orders" element={<ComingSoon title="Order History" description="Your full order history with status updates and delivery confirmations. Coming in v2.1." backTo="/buyer" />} />              <Route path="/dashboard/settings" element={<Settings />} />
               <Route path="/buyer" element={<BuyerDashboard />} />
               <Route path="/buyer/tracking" element={<Tracking />} />
               <Route path="/buyer/settings" element={<Settings />} />
@@ -60,7 +63,6 @@ const App = () => (
               <Route path="/faq" element={<FAQ />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/buyer/orders" element={<BuyerOrders />} />
               <Route path="/buyer/bin" element={<BuyerBin />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

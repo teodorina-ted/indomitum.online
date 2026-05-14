@@ -37,7 +37,6 @@ import {
   Navigation,
   Barcode,
   RefreshCw,
-  Camera,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
@@ -151,8 +150,6 @@ const Dashboard = () => {
     latitude: "",
     longitude: "",
   });
-  const [editImageFile, setEditImageFile] = useState<File | null>(null);
-  const [editImagePreview, setEditImagePreview] = useState<string>("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Export modal
@@ -394,8 +391,6 @@ const Dashboard = () => {
       latitude: seed.latitude == null ? "" : String(seed.latitude),
       longitude: seed.longitude == null ? "" : String(seed.longitude),
     });
-    setEditImageFile(null);
-    setEditImagePreview(seed.image_url || "");
     setEditOpen(true);
   };
 
@@ -413,38 +408,9 @@ const Dashboard = () => {
     }
 
     setIsSavingEdit(true);
-
-    let imageUrl: string | null = editingSeed.image_url ?? null;
-    if (editImageFile) {
-      // Compress new image before saving
-      imageUrl = await new Promise<string>((resolve, reject) => {
-        const img = new Image();
-        const url = URL.createObjectURL(editImageFile);
-        img.onload = () => {
-          const MAX = 800;
-          let { width, height } = img;
-          if (width > MAX || height > MAX) {
-            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
-            else { width = Math.round(width * MAX / height); height = MAX; }
-          }
-          const canvas = document.createElement("canvas");
-          canvas.width = width; canvas.height = height;
-          canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
-          URL.revokeObjectURL(url);
-          resolve(canvas.toDataURL("image/jpeg", 0.75));
-        };
-        img.onerror = reject;
-        img.src = url;
-      });
-    } else if (!editImagePreview) {
-      // User cleared the image
-      imageUrl = null;
-    }
-
     const updatePayload: Partial<Seed> = {
       name: editForm.name.trim(),
       quantity,
-      image_url: imageUrl,
       notes: editForm.notes.trim() ? editForm.notes.trim() : null,
       street: editForm.street.trim() ? editForm.street.trim() : null,
       city: editForm.city.trim() ? editForm.city.trim() : null,
@@ -965,7 +931,17 @@ const Dashboard = () => {
             title="Tracking"
           >
             <MapPin className="w-5 h-5 flex-shrink-0" />
-            {!sidebarCollapsed && <span>Tracking</span>}
+            {!sidebarCollapsed && <><span>Tracking</span><span className="ml-auto text-xs bg-muted px-1.5 py-0.5 rounded-full">v2.1</span></>}
+          </Link>
+          <Link
+            to="/dashboard/orders"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors ${
+              sidebarCollapsed ? "justify-center" : ""
+            }`}
+            title="Orders"
+          >
+            <Package className="w-5 h-5 flex-shrink-0" />
+            {!sidebarCollapsed && <><span>Orders</span><span className="ml-auto text-xs bg-muted px-1.5 py-0.5 rounded-full">v2.1</span></>}
           </Link>
           <Link
             to="/dashboard/settings"
@@ -1093,6 +1069,16 @@ const Dashboard = () => {
               >
                 <MapPin className="w-5 h-5" />
                 Tracking
+                <span className="ml-auto text-xs bg-muted px-1.5 py-0.5 rounded-full">v2.1</span>
+              </Link>
+              <Link
+                to="/dashboard/orders"
+                onClick={() => setSidebarOpen(false)}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              >
+                <Package className="w-5 h-5" />
+                Orders
+                <span className="ml-auto text-xs bg-muted px-1.5 py-0.5 rounded-full">v2.1</span>
               </Link>
               <Link
                 to="/dashboard/settings"
@@ -1718,45 +1704,6 @@ const Dashboard = () => {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Photo */}
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-2">Photo</label>
-              <label className="block cursor-pointer">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={e => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      setEditImageFile(file);
-                      setEditImagePreview(URL.createObjectURL(file));
-                    }
-                  }}
-                />
-                {editImagePreview ? (
-                  <div className="relative w-full rounded-xl overflow-hidden border border-border group">
-                    <img src={editImagePreview} alt="Plant" className="w-full max-h-48 object-cover" />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="text-white text-sm font-medium bg-black/50 px-3 py-1 rounded-full">Tap to change</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={e => { e.preventDefault(); setEditImageFile(null); setEditImagePreview(""); }}
-                      className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full p-1 transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="w-full h-28 rounded-xl border-2 border-dashed border-border bg-muted/20 flex flex-col items-center justify-center gap-2 hover:border-primary/50 hover:bg-muted/30 transition-all">
-                    <Camera className="w-6 h-6 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Add a photo</span>
-                  </div>
-                )}
-              </label>
-            </div>
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-foreground mb-2">Plant Name</label>
