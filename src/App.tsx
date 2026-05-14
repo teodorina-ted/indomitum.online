@@ -7,7 +7,6 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ThemeProvider } from "next-themes";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
-import CollectorOrders from "@/pages/CollectorOrders";
 import Dashboard from "./pages/Dashboard";
 import AddPlant from "./pages/AddPlant";
 import RecycleBin from "./pages/RecycleBin";
@@ -28,6 +27,7 @@ import VerifyEmail from "./pages/VerifyEmail";
 import ResetPassword from "./pages/ResetPassword";
 import BuyerOrders from "./pages/BuyerOrders";
 import BuyerBin from "./pages/BuyerBin";
+import CollectorOrders from "./pages/CollectorOrders";
 
 const queryClient = new QueryClient();
 
@@ -46,11 +46,11 @@ const App = () => (
               <Route path="/scanner" element={<Scanner />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/dashboard/add" element={<AddPlant />} />
-              <Route path="/dashboard/orders" element={<CollectorOrders />} />
-            <Route path="/dashboard/bin" element={<RecycleBin />} />
+              <Route path="/dashboard/bin" element={<RecycleBin />} />
               <Route path="/dashboard/history" element={<HistoryPage />} />
               <Route path="/dashboard/tracking" element={<Tracking />} />
               <Route path="/dashboard/settings" element={<Settings />} />
+              <Route path="/dashboard/orders" element={<CollectorOrders />} />
               <Route path="/buyer" element={<BuyerDashboard />} />
               <Route path="/buyer/tracking" element={<Tracking />} />
               <Route path="/buyer/settings" element={<Settings />} />
