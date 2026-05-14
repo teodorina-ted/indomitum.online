@@ -273,8 +273,7 @@ const AddPlant = () => {
                   <Input
                     placeholder="e.g., SEED-ABC123"
                     value={formData.id}
-                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))}
-                    onKeyDown={e => e.key === "Enter" && formData.id.trim() && document.getElementById("add-plant-continue")?.click()}
+                    onChange={e => { const val = e.target.value; setFormData(p => ({ ...p, id: val })); }}                    onKeyDown={e => e.key === "Enter" && formData.id.trim() && document.getElementById("add-plant-continue")?.click()}
                   />
                   <p className="text-xs text-muted-foreground mt-1">Press Continue to validate</p>
                 </div>
