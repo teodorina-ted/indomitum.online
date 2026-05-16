@@ -53,15 +53,14 @@ const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerPro
         verbose: false,
       });
 
-      // Request camera and start scanning — try back camera, fall back to any
       const config = { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1 };
       const onSuccess = (decodedText: string) => { stopScanner(); onScan(decodedText); };
-      const onFail = () => {};
 
+      // Try back camera, fall back to front/any if rejected
       try {
-        await scannerRef.current.start({ facingMode: { ideal: "environment" } }, config, onSuccess, onFail);
+        await scannerRef.current.start({ facingMode: { ideal: "environment" } }, config, onSuccess, () => {});
       } catch {
-        await scannerRef.current.start({ facingMode: "user" }, config, onSuccess, onFail);
+        await scannerRef.current.start({ facingMode: "user" }, config, onSuccess, () => {});
       }
 
       setIsScanning(true);
@@ -101,38 +100,30 @@ const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerPro
       <div
         id={containerIdRef.current}
         ref={containerRef}
-        className="w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden bg-muted/30 border-2 border-dashed border-border relative"
-      >
-        {/* Placeholder shown when not scanning */}
-        {!isScanning && !isStarting && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
-            <Camera className="w-10 h-10 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">
-              Available on mobile & tablet.<br />
-              Tap below to start camera.
-            </p>
-          </div>
-        )}
-        {isStarting && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-          </div>
-        )}
-      </div>
+        className="w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden bg-muted/30 border-2 border-dashed border-border"
+        style={{ minHeight: isScanning ? "250px" : "0" }}
+      />
 
-      {/* Single button below box */}
+      {/* Controls */}
       <div className="flex justify-center mt-4">
         {!isScanning ? (
           <Button onClick={startScanner} size="lg" disabled={isStarting}>
             {isStarting ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Starting...</>
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Starting...
+              </>
             ) : (
-              <><Camera className="w-4 h-4 mr-2" />Scan with Camera</>
+              <>
+                <Camera className="w-4 h-4 mr-2" />
+                Scan with Camera
+              </>
             )}
           </Button>
         ) : (
-          <Button onClick={stopScanner} variant="outline" size="lg">
-            <StopCircle className="w-4 h-4 mr-2" />Stop Scanner
+          <Button onClick={stopScanner} variant="destructive" size="lg">
+            <StopCircle className="w-4 h-4 mr-2" />
+            Stop Scanner
           </Button>
         )}
       </div>

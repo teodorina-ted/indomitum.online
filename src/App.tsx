@@ -14,7 +14,6 @@ import BuyerDashboard from "./pages/BuyerDashboard";
 import HistoryPage from "./pages/History";
 import SeedPassport from "./pages/SeedPassport";
 import Install from "./pages/Install";
-import Scanner from "./pages/Scanner";
 import Tracking from "./pages/Tracking";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -43,7 +42,6 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
               <Route path="/install" element={<Install />} />
-              <Route path="/scanner" element={<Scanner />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/dashboard/add" element={<AddPlant />} />
               <Route path="/dashboard/bin" element={<RecycleBin />} />
