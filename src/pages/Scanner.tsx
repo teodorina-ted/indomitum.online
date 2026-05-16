@@ -5,14 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Camera, StopCircle, Search, Leaf } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
 
 const Scanner = () => {
   const navigate = useNavigate();
+  const { user, isLoading } = useAuth();
   const [isScanning, setIsScanning] = useState(false);
   const [manualId, setManualId] = useState("");
   const [starting, setStarting] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const mountedRef = useRef(true);
+  const containerId = useRef(`scanner-${Math.random().toString(36).substr(2, 9)}`);
+
+  // Auth guard — redirect if not logged in
+  useEffect(() => {
+    if (!isLoading && !user) navigate("/login");
+  }, [user, isLoading, navigate]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -24,9 +32,7 @@ const Scanner = () => {
 
   const extractSeedId = (raw: string): string => {
     try {
-      if (raw.includes("/passport/")) {
-        return decodeURIComponent(raw.split("/passport/").pop()!.split("?")[0]);
-      }
+      if (raw.includes("/passport/")) return decodeURIComponent(raw.split("/passport/").pop()!.split("?")[0]);
       if (raw.startsWith("http")) {
         const parts = new URL(raw).pathname.split("/").filter(Boolean);
         return parts[parts.length - 1] || raw;
@@ -57,47 +63,46 @@ const Scanner = () => {
     try {
       await stopScanner();
 
-      scannerRef.current = new Html5Qrcode("buyer-scanner-container", {
-  verbose: false,
-  formatsToSupport: undefined, // all formats
-});
+      // No formatsToSupport — passing undefined crashes with forEach error
+      scannerRef.current = new Html5Qrcode(containerId.current, { verbose: false });
 
       const config = { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1 };
-      const onSuccess = (decodedText: string) => { stopScanner(); toast.success("Code scanned!"); goToPassport(decodedText); };
-      const onFail = () => {};
+      const onSuccess = (decodedText: string) => {
+        stopScanner();
+        toast.success("Code scanned!");
+        goToPassport(decodedText);
+      };
 
+      // Try back camera, fall back to any camera
       try {
-        await scannerRef.current.start({ facingMode: { ideal: "environment" } }, config, onSuccess, onFail);
+        await scannerRef.current.start({ facingMode: { ideal: "environment" } }, config, onSuccess, () => {});
       } catch {
-        await scannerRef.current.start({ facingMode: "user" }, config, onSuccess, onFail);
+        await scannerRef.current.start({ facingMode: "user" }, config, onSuccess, () => {});
       }
 
       if (mountedRef.current) setIsScanning(true);
 
-      // iOS Safari fix
-      const video = document.querySelector("#buyer-scanner-container video") as HTMLVideoElement;
-      if (video) {
-        video.setAttribute("playsinline", "true");
-        video.muted = true;
-        (video as any).playsInline = true;
-      }
-    } catch (error: any) {
-      const msg = error?.message || "";
+      const video = document.querySelector(`#${containerId.current} video`) as HTMLVideoElement;
+      if (video) { video.setAttribute("playsinline", "true"); video.muted = true; }
+
+    } catch (err: any) {
+      const msg = err?.message || "";
       if (msg.includes("Permission") || msg.includes("NotAllowed")) {
-        toast.error("Camera permission denied. Please allow camera access.");
+        toast.error("Camera permission denied. Allow camera access in browser settings.");
       } else if (msg.includes("NotFound")) {
         toast.error("No camera found on this device.");
       } else {
-        toast.error("Could not start scanner. Try again.");
+        toast.error("Could not start camera. Make sure no other app is using it.");
       }
     } finally {
       if (mountedRef.current) setStarting(false);
     }
   }, []);
 
+  if (isLoading) return null;
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
         <div className="flex h-14 items-center gap-4 px-4 max-w-lg mx-auto">
           <Button variant="ghost" size="icon" onClick={() => { stopScanner(); navigate(-1); }}>
@@ -113,22 +118,19 @@ const Scanner = () => {
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
-        {/* Title */}
         <div className="text-center">
           <h2 className="text-xl font-bold text-foreground">Scan Your Product</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Enter the ID from your seed bag to view its Plant Passport
+            Point at a QR code or barcode on the seed bag
           </p>
         </div>
 
-        {/* Scanner box */}
+        {/* Scanner box with placeholder */}
         <div className="relative w-full aspect-square max-w-sm mx-auto rounded-2xl overflow-hidden bg-muted border-2 border-dashed border-border">
-          <div id="buyer-scanner-container" className="w-full h-full" />
-
-          {/* Placeholder when not scanning */}
+          <div id={containerId.current} className="w-full h-full" />
           {!isScanning && !starting && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center pointer-events-none">
-              <Camera className="w-10 h-10 text-muted-foreground/50" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center p-6 pointer-events-none">
+              <Camera className="w-10 h-10 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">
                 Available on mobile & tablet.<br />Tap below to start camera.
               </p>
@@ -136,7 +138,7 @@ const Scanner = () => {
           )}
           {starting && (
             <div className="absolute inset-0 flex items-center justify-center">
-              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           )}
         </div>
@@ -150,13 +152,11 @@ const Scanner = () => {
             </Button>
           ) : (
             <Button onClick={stopScanner} variant="outline" size="lg" className="w-full max-w-xs">
-              <StopCircle className="h-5 w-5 mr-2" />
-              Stop Scanning
+              <StopCircle className="h-5 w-5 mr-2" />Stop Scanning
             </Button>
           )}
         </div>
 
-        {/* Divider */}
         <div className="relative">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
           <div className="relative flex justify-center text-xs uppercase">
@@ -164,7 +164,6 @@ const Scanner = () => {
           </div>
         </div>
 
-        {/* Manual input */}
         <div className="space-y-3">
           <Input
             placeholder="e.g., SEED-ABC123"
@@ -173,17 +172,10 @@ const Scanner = () => {
             onKeyDown={e => { if (e.key === "Enter" && manualId.trim()) goToPassport(manualId); }}
             className="text-center font-mono"
           />
-          <Button
-            className="w-full"
-            size="lg"
-            disabled={!manualId.trim()}
-            onClick={() => goToPassport(manualId)}
-          >
-            <Search className="w-4 h-4 mr-2" />
-            View Passport
+          <Button className="w-full" size="lg" disabled={!manualId.trim()} onClick={() => goToPassport(manualId)}>
+            <Search className="w-4 h-4 mr-2" />View Passport
           </Button>
         </div>
-
       </main>
     </div>
   );
