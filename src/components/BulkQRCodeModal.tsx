@@ -27,9 +27,10 @@ interface BulkQRCodeModalProps {
 const BulkQRCodeModal = ({
   open,
   onOpenChange,
-  seeds,
+  seeds: rawSeeds,
   baseUrl,
 }: BulkQRCodeModalProps) => {
+  const seeds = Array.isArray(rawSeeds) ? rawSeeds : [];
   const printRef = useRef<HTMLDivElement>(null);
 
   const handleBulkPrint = () => {
