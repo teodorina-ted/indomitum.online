@@ -10,6 +10,19 @@
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#2d5016" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <script>
+      // Unregister stale service workers and reload once to get fresh bundle
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          let unregistered = false;
+          regs.forEach(reg => { reg.unregister(); unregistered = true; });
+          if (unregistered) {
+            caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+          }
+        });
+      }
+    </script>
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Indomitum" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
