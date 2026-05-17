@@ -256,7 +256,7 @@ const AddPlant = () => {
                   <p className="text-sm font-medium text-primary">ID Ready</p>
                   <p className="font-mono text-sm text-foreground">{formData.id}</p>
                 </div>
-                <button onClick={() => setFormData(p => ({ ...p, id: "" }))} className="text-muted-foreground hover:text-foreground p-1">
+                <button onClick={() => { setFormData(p => ({ ...p, id: "" })); setManualIdInput(""); }} className="text-muted-foreground hover:text-foreground p-1">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -270,13 +270,38 @@ const AddPlant = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-2 block">Bag ID</label>
-                  <Input
-                    placeholder="e.g., SEED-ABC123"
-                    value={formData.id}
-                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))}
-                    onKeyDown={e => e.key === "Enter" && formData.id.trim() && document.getElementById("add-plant-continue")?.click()}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Press Continue to validate</p>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="e.g., SEED-ABC123"
+                      value={manualIdInput}
+                      onChange={e => setManualIdInput(e.target.value)}
+                      onKeyDown={async e => {
+                        if (e.key === "Enter" && manualIdInput.trim()) {
+                          const valid = await validateDuplicateId(manualIdInput.trim());
+                          if (valid) {
+                            setFormData(p => ({ ...p, id: manualIdInput.trim() }));
+                            setManualIdInput("");
+                          }
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        if (!manualIdInput.trim()) return;
+                        const valid = await validateDuplicateId(manualIdInput.trim());
+                        if (valid) {
+                          setFormData(p => ({ ...p, id: manualIdInput.trim() }));
+                          setManualIdInput("");
+                        }
+                      }}
+                      disabled={!manualIdInput.trim()}
+                    >
+                      Set ID
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Type the ID then press Enter or "Set ID"</p>
                 </div>
               </>
             )}
