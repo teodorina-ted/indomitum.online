@@ -19,48 +19,56 @@ const FORMATS = [
 
 const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
   const [state, setState] = useState<"idle" | "starting" | "scanning">("idle");
+  const stateRef = useRef<"idle" | "starting" | "scanning">("idle");
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const mountedRef = useRef(true);
-  const stateRef = useRef<"idle" | "starting" | "scanning">("idle");
-  // stable unique DOM id per mount
-  const idRef = useRef(`ws-${Math.random().toString(36).slice(2, 9)}`);
+  // Wrapper that React owns — scanner div lives INSIDE this, created imperatively
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const scannerDivId = useRef(`ws-${Math.random().toString(36).slice(2, 9)}`);
 
-  const setStateSafe = (s: "idle" | "starting" | "scanning") => {
+  const setS = (s: "idle" | "starting" | "scanning") => {
     stateRef.current = s;
     if (mountedRef.current) setState(s);
   };
 
   useEffect(() => {
     mountedRef.current = true;
+
+    // Create the scanner div imperatively so React never touches it
+    const div = document.createElement("div");
+    div.id = scannerDivId.current;
+    div.style.cssText = "width:100%;height:100%;";
+    wrapperRef.current?.appendChild(div);
+
     return () => {
       mountedRef.current = false;
-      // cleanup on unmount without setState
-      const s = scannerRef.current;
-      if (s) {
-        try { if (s.isScanning) s.stop().catch(() => {}); } catch {}
-        try { s.clear().catch(() => {}); } catch {}
-        scannerRef.current = null;
+      const qr = scannerRef.current;
+      scannerRef.current = null;
+      if (qr) {
+        try { if (qr.isScanning) qr.stop().catch(() => {}); } catch {}
+        try { qr.clear().catch(() => {}); } catch {}
       }
+      // Remove the imperatively created div safely
+      try { div.parentNode?.removeChild(div); } catch {}
     };
   }, []);
 
   const stop = useCallback(async () => {
-    const s = scannerRef.current;
+    const qr = scannerRef.current;
     scannerRef.current = null;
-    if (s) {
-      try { if (s.isScanning) await s.stop(); } catch {}
-      try { await s.clear(); } catch {}
+    if (qr) {
+      try { if (qr.isScanning) await qr.stop(); } catch {}
+      try { await qr.clear(); } catch {}
     }
-    setStateSafe("idle");
+    setS("idle");
   }, []);
 
   const start = useCallback(async () => {
-    // Guard: only start from idle
     if (stateRef.current !== "idle") return;
-    setStateSafe("starting");
+    setS("starting");
 
     try {
-      // Clean up any previous instance first
+      // Stop any previous instance
       const prev = scannerRef.current;
       scannerRef.current = null;
       if (prev) {
@@ -68,24 +76,21 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
         try { await prev.clear(); } catch {}
       }
 
-      // Small delay to let DOM settle after clear()
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, 120));
       if (!mountedRef.current) return;
 
-      const qr = new Html5Qrcode(idRef.current, {
+      const qr = new Html5Qrcode(scannerDivId.current, {
         verbose: false,
         formatsToSupport: FORMATS,
       });
       scannerRef.current = qr;
 
-      const cfg = { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1 };
+      const cfg = { fps: 12, qrbox: { width: 200, height: 200 }, aspectRatio: 1 };
 
       const onSuccess = (text: string) => {
-        // stop async, then notify
         stop().then(() => { if (mountedRef.current) onScan(text); });
       };
 
-      // Try rear camera first, fall back to any camera
       try {
         await qr.start({ facingMode: { ideal: "environment" } }, cfg, onSuccess, () => {});
       } catch {
@@ -93,18 +98,18 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
         await qr.start({ facingMode: "user" }, cfg, onSuccess, () => {});
       }
 
-      if (mountedRef.current) setStateSafe("scanning");
+      if (mountedRef.current) setS("scanning");
     } catch (err: any) {
       if (!mountedRef.current) return;
-      setStateSafe("idle");
+      setS("idle");
       const msg = err?.message || "";
       if (msg.includes("Permission") || msg.includes("NotAllowed")) {
         toast.error("Camera permission denied. Allow it in browser settings.");
       } else if (msg.includes("NotFound")) {
         toast.error("No camera found on this device.");
-      } else if (msg.includes("transition")) {
-        // transient state error — just reset silently
-        console.warn("Scanner state conflict, reset.");
+      } else if (msg.includes("transition") || msg.includes("removeChild")) {
+        // DOM conflict — silent reset
+        console.warn("Scanner DOM conflict, reset.");
       } else {
         toast.error("Could not start camera. Try again.");
         console.error("Scanner:", err);
@@ -114,8 +119,9 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
 
   return (
     <div className={className}>
+      {/* Wrapper React owns — scanner div inside is imperatively managed */}
       <div
-        id={idRef.current}
+        ref={wrapperRef}
         className="w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden bg-muted/30 border-2 border-dashed border-border relative"
       >
         {state === "idle" && (
@@ -125,7 +131,7 @@ const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
           </div>
         )}
         {state === "starting" && (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center bg-muted/30">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
           </div>
         )}
