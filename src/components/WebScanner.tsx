@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
 import { Camera, StopCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -51,6 +51,13 @@ const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerPro
       // Create new scanner instance
       scannerRef.current = new Html5Qrcode(containerIdRef.current, {
         verbose: false,
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+        ],
       });
 
       const config = { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1 };
