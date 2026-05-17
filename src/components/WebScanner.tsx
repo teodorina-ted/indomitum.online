@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
 import { Camera, StopCircle, Loader2 } from "lucide-react";
@@ -7,137 +7,117 @@ import { toast } from "sonner";
 interface WebScannerProps {
   onScan: (result: string) => void;
   className?: string;
-  autoStart?: boolean;
 }
 
-const WebScanner = ({ onScan, className = "", autoStart = false }: WebScannerProps) => {
-  const [isScanning, setIsScanning] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const containerIdRef = useRef(`scanner-${Math.random().toString(36).substr(2, 9)}`);
+const FORMATS = [
+  Html5QrcodeSupportedFormats.QR_CODE,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.DATA_MATRIX,
+];
 
-  // Auto-start on mount
+const WebScanner = ({ onScan, className = "" }: WebScannerProps) => {
+  const [state, setState] = useState<"idle" | "starting" | "scanning">("idle");
+  const scanner = useRef<Html5Qrcode | null>(null);
+  const id = useRef(`ws-${Math.random().toString(36).slice(2, 9)}`);
+  const busy = useRef(false);
+
   useEffect(() => {
-    if (autoStart) {
-      startScanner();
-    }
+    return () => { stop(); };
   }, []);
 
-  const stopScanner = useCallback(async () => {
-    if (scannerRef.current) {
+  const stop = async () => {
+    if (scanner.current) {
       try {
-        if (scannerRef.current.isScanning) {
-          await scannerRef.current.stop();
-        }
-        await scannerRef.current.clear();
-      } catch (error) {
-        console.error("Error stopping scanner:", error);
-      }
-      scannerRef.current = null;
+        if (scanner.current.isScanning) await scanner.current.stop();
+        await scanner.current.clear();
+      } catch {}
+      scanner.current = null;
     }
-    setIsScanning(false);
-  }, []);
+    setState("idle");
+    busy.current = false;
+  };
 
-  const startScanner = useCallback(async () => {
-    if (!containerRef.current || isScanning) return;
-
-    setIsStarting(true);
+  const start = async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setState("starting");
 
     try {
-      // Clean up any existing scanner
-      await stopScanner();
+      await stop();
 
-      // Create new scanner instance
-      scannerRef.current = new Html5Qrcode(containerIdRef.current, {
+      scanner.current = new Html5Qrcode(id.current, {
         verbose: false,
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.DATA_MATRIX,
-        ],
+        formatsToSupport: FORMATS,
       });
 
-      const config = { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1 };
-      const onSuccess = (decodedText: string) => { stopScanner(); onScan(decodedText); };
+      const cfg = { fps: 15, qrbox: { width: 220, height: 220 }, aspectRatio: 1 };
 
-      // Try back camera, fall back to front/any if rejected
+      const success = (text: string) => {
+        stop();
+        onScan(text);
+      };
+
       try {
-        await scannerRef.current.start({ facingMode: { ideal: "environment" } }, config, onSuccess, () => {});
+        await scanner.current.start({ facingMode: { ideal: "environment" } }, cfg, success, () => {});
       } catch {
-        await scannerRef.current.start({ facingMode: "user" }, config, onSuccess, () => {});
+        await scanner.current.start({ facingMode: "user" }, cfg, success, () => {});
       }
 
-      setIsScanning(true);
-
-      // iOS Safari fix: ensure video has playsinline and muted
-      const videoElement = containerRef.current?.querySelector("video");
-      if (videoElement) {
-        videoElement.setAttribute("playsinline", "true");
-        videoElement.setAttribute("muted", "true");
-        videoElement.playsInline = true;
-        videoElement.muted = true;
+      setState("scanning");
+    } catch (err: any) {
+      busy.current = false;
+      setState("idle");
+      const msg = err?.message || "";
+      if (msg.includes("Permission") || msg.includes("NotAllowed")) {
+        toast.error("Camera permission denied. Allow it in browser settings.");
+      } else if (msg.includes("NotFound")) {
+        toast.error("No camera found on this device.");
+      } else {
+        toast.error("Could not start camera. Try again.");
+        console.error("Scanner:", err);
       }
-    } catch (error) {
-      console.error("Scanner error:", error);
-      if (error instanceof Error) {
-        if (error.message.includes("Permission")) {
-          toast.error("Camera permission denied. Please allow camera access.");
-        } else {
-          toast.error("Failed to start scanner. Try again.");
-        }
-      }
-    } finally {
-      setIsStarting(false);
     }
-  }, [isScanning, onScan, stopScanner]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopScanner();
-    };
-  }, [stopScanner]);
+  };
 
   return (
     <div className={className}>
-      {/* Scanner Container */}
       <div
-        id={containerIdRef.current}
-        ref={containerRef}
-        className="w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden bg-muted/30 border-2 border-dashed border-border"
-        style={{ minHeight: isScanning ? "250px" : "0" }}
-      />
+        id={id.current}
+        className="w-full aspect-square max-w-xs mx-auto rounded-2xl overflow-hidden bg-muted/30 border-2 border-dashed border-border relative"
+      >
+        {state === "idle" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center p-4 pointer-events-none">
+            <Camera className="w-8 h-8 text-muted-foreground/40" />
+            <p className="text-xs text-muted-foreground">Tap below to start camera</p>
+          </div>
+        )}
+        {state === "starting" && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+          </div>
+        )}
+      </div>
 
-      {/* Controls */}
       <div className="flex justify-center mt-4">
-        {!isScanning ? (
-          <Button onClick={startScanner} size="lg" disabled={isStarting}>
-            {isStarting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Starting...
-              </>
-            ) : (
-              <>
-                <Camera className="w-4 h-4 mr-2" />
-                Scan with Camera
-              </>
-            )}
+        {state !== "scanning" ? (
+          <Button onClick={start} size="lg" disabled={state === "starting"}>
+            {state === "starting"
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Starting...</>
+              : <><Camera className="w-4 h-4 mr-2" />Scan with Camera</>
+            }
           </Button>
         ) : (
-          <Button onClick={stopScanner} variant="destructive" size="lg">
-            <StopCircle className="w-4 h-4 mr-2" />
-            Stop Scanner
+          <Button onClick={stop} variant="outline" size="lg">
+            <StopCircle className="w-4 h-4 mr-2" />Stop
           </Button>
         )}
       </div>
 
-      {isScanning && (
+      {state === "scanning" && (
         <p className="text-xs text-muted-foreground text-center mt-2">
-          Point camera at QR code or barcode
+          Point at a QR code or barcode
         </p>
       )}
     </div>
