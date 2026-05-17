@@ -329,10 +329,20 @@ app.post("/buyer/orders", auth, async (req, res) => {
 
     // Create one order per collector
     for (const [collectorId, collectorItems] of Object.entries(collectorMap)) {
+      // Get buyer profile for required fields
+      const { rows: buyerRows } = await pool.query(
+        `SELECT u.email, p.full_name FROM users u
+         LEFT JOIN profiles p ON p.user_id = u.id
+         WHERE u.id = $1`,
+        [req.user.id]
+      );
+      const buyerEmail = buyerRows[0]?.email || '';
+      const buyerName = buyerRows[0]?.full_name || buyerEmail;
+
       const { rows: orderRows } = await pool.query(
-        `INSERT INTO orders (buyer_id, collector_id, status, notes, delivery_address, created_at)
-         VALUES ($1, $2, 'requested', $3, $4, now()) RETURNING *`,
-        [req.user.id, collectorId, notes || null, delivery_address || null]
+        `INSERT INTO orders (buyer_id, collector_id, buyer_name, buyer_email, status, notes, created_at)
+         VALUES ($1, $2, $3, $4, 'requested', $5, now()) RETURNING *`,
+        [req.user.id, collectorId, buyerName, buyerEmail, notes || null]
       );
       const order = orderRows[0];
       createdOrders.push(order);

@@ -25,6 +25,8 @@ import VerifyEmail from "./pages/VerifyEmail";
 import ResetPassword from "./pages/ResetPassword";
 import BuyerBin from "./pages/BuyerBin";
 import ComingSoon from "./pages/ComingSoon";
+import CollectorOrders from "./pages/CollectorOrders";
+import BuyerOrders from "./pages/BuyerOrders";
 
 const queryClient = new QueryClient();
 
@@ -46,11 +48,11 @@ const App = () => (
               <Route path="/dashboard/history" element={<HistoryPage />} />
               <Route path="/dashboard/settings" element={<Settings />} />
               <Route path="/dashboard/tracking" element={<ComingSoon title="Order Tracking" description="Track your orders from confirmation through shipping to delivery. Coming in v2.1." backTo="/dashboard" />} />
-              <Route path="/dashboard/orders" element={<ComingSoon title="Orders" description="Manage incoming orders from buyers. Coming in v2.1." backTo="/dashboard" />} />
+              <Route path="/dashboard/orders" element={<CollectorOrders />} />
               <Route path="/buyer" element={<BuyerDashboard />} />
               <Route path="/buyer/settings" element={<Settings />} />
               <Route path="/buyer/tracking" element={<ComingSoon title="Order Tracking" description="Track your orders in real time from confirmation to delivery. Coming in v2.1." backTo="/buyer" />} />
-              <Route path="/buyer/orders" element={<ComingSoon title="Order History" description="Your full order history with status updates. Coming in v2.1." backTo="/buyer" />} />
+              <Route path="/buyer/orders" element={<BuyerOrders />} />
               <Route path="/buyer/bin" element={<BuyerBin />} />
               <Route path="/passport/:seedId" element={<SeedPassport />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />

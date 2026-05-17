@@ -98,7 +98,7 @@ const FAVORITES_KEY = "indomitum_buyer_favorites";
 const BuyerDashboard = () => {
   const { user, profile, signOut, isLoading: authLoading, isCollector } = useAuth();
   const navigate = useNavigate();
-  const [scanInput, setScanInput] = useState("");  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"scan" | "seeds" | "favorites">("seeds");
