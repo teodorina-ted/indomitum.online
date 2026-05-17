@@ -14,7 +14,6 @@ import BuyerDashboard from "./pages/BuyerDashboard";
 import HistoryPage from "./pages/History";
 import SeedPassport from "./pages/SeedPassport";
 import Install from "./pages/Install";
-import Tracking from "./pages/Tracking";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -24,7 +23,6 @@ import Tutorial from "./pages/Tutorial";
 import FAQ from "./pages/FAQ";
 import VerifyEmail from "./pages/VerifyEmail";
 import ResetPassword from "./pages/ResetPassword";
-import BuyerOrders from "./pages/BuyerOrders";
 import BuyerBin from "./pages/BuyerBin";
 import ComingSoon from "./pages/ComingSoon";
 
@@ -46,14 +44,14 @@ const App = () => (
               <Route path="/dashboard/add" element={<AddPlant />} />
               <Route path="/dashboard/bin" element={<RecycleBin />} />
               <Route path="/dashboard/history" element={<HistoryPage />} />
-              <Route path="/dashboard/tracking" element={<ComingSoon title="Order Tracking" description="Track your orders from confirmation through shipping to delivery. Coming in v2.1." backTo="/dashboard" />} />
-              <Route path="/dashboard/orders" element={<ComingSoon title="Orders" description="Manage incoming orders from buyers — review, edit quantities, update status and add tracking. Coming in v2.1." backTo="/dashboard" />} />
-              <Route path="/buyer/tracking" element={<ComingSoon title="Order Tracking" description="Track your orders in real time — from the collector confirming through shipping to delivery confirmation. Coming in v2.1." backTo="/buyer" />} />
-              <Route path="/buyer/orders" element={<ComingSoon title="Order History" description="Your full order history with status updates and delivery confirmations. Coming in v2.1." backTo="/buyer" />} />
               <Route path="/dashboard/settings" element={<Settings />} />
+              <Route path="/dashboard/tracking" element={<ComingSoon title="Order Tracking" description="Track your orders from confirmation through shipping to delivery. Coming in v2.1." backTo="/dashboard" />} />
+              <Route path="/dashboard/orders" element={<ComingSoon title="Orders" description="Manage incoming orders from buyers. Coming in v2.1." backTo="/dashboard" />} />
               <Route path="/buyer" element={<BuyerDashboard />} />
-              <Route path="/buyer/tracking" element={<Tracking />} />
               <Route path="/buyer/settings" element={<Settings />} />
+              <Route path="/buyer/tracking" element={<ComingSoon title="Order Tracking" description="Track your orders in real time from confirmation to delivery. Coming in v2.1." backTo="/buyer" />} />
+              <Route path="/buyer/orders" element={<ComingSoon title="Order History" description="Your full order history with status updates. Coming in v2.1." backTo="/buyer" />} />
+              <Route path="/buyer/bin" element={<BuyerBin />} />
               <Route path="/passport/:seedId" element={<SeedPassport />} />
               <Route path="/privacy" element={<PrivacyPolicy />} />
               <Route path="/terms" element={<TermsOfService />} />
@@ -62,8 +60,6 @@ const App = () => (
               <Route path="/faq" element={<FAQ />} />
               <Route path="/verify-email" element={<VerifyEmail />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-              <Route path="/buyer/bin" element={<BuyerBin />} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

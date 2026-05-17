@@ -41,7 +41,6 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
-import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import WebScanner from "@/components/WebScanner";
 import ProfileSwitcher from "@/components/ProfileSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -99,8 +98,7 @@ const FAVORITES_KEY = "indomitum_buyer_favorites";
 const BuyerDashboard = () => {
   const { user, profile, signOut, isLoading: authLoading, isCollector } = useAuth();
   const navigate = useNavigate();
-  const { isNative: canScan, scanBarcode } = useBarcodeScanner();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [scanInput, setScanInput] = useState("");  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"scan" | "seeds" | "favorites">("seeds");
@@ -109,7 +107,7 @@ const BuyerDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [scanInput, setScanInput] = useState("");
   const [isScanning, setIsScanning] = useState(false);
-  const [showWebScanner, setShowWebScanner] = useState(false);
+
   const [passportOpen, setPassportOpen] = useState(false);
   const [currentPassport, setCurrentPassport] = useState<SeedPassport | null>(null);
   const [favorites, setFavorites] = useState<SeedPassport[]>([]);
@@ -140,41 +138,30 @@ const BuyerDashboard = () => {
   const [pendingSeedIdToUuid, setPendingSeedIdToUuid] = useState<Record<string, string>>({});
   const [pendingAssignedUuids, setPendingAssignedUuids] = useState<Set<string>>(new Set());
 
-  // Load favorites from localStorage
   useEffect(() => {
-    const stored = localStorage.getItem(FAVORITES_KEY);
-    if (stored) {
-      try {
-        setFavorites(JSON.parse(stored));
-      } catch {
-        setFavorites([]);
-      }
-    }
-  }, []);
+    if (!user) return;
+    api.getFavorites().then(({ data }) => {
+      if (data) setFavorites(data as SeedPassport[]);
+    });
+  }, [user]);
 
   useEffect(() => {
     try {
       const completed = localStorage.getItem(tourStorageKey) === "true";
       if (!completed) setTourOpen(true);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, []);
-
-  // Save favorites to localStorage
-  const saveFavorites = (newFavorites: SeedPassport[]) => {
-    setFavorites(newFavorites);
-    localStorage.setItem(FAVORITES_KEY, JSON.stringify(newFavorites));
-  };
 
   const isFavorite = (seedId: string) => favorites.some(f => f.seed_id === seedId);
 
-  const toggleFavorite = (seed: SeedPassport) => {
+  const toggleFavorite = async (seed: SeedPassport) => {
     if (isFavorite(seed.seed_id)) {
-      saveFavorites(favorites.filter(f => f.seed_id !== seed.seed_id));
+      setFavorites(prev => prev.filter(f => f.seed_id !== seed.seed_id));
+      await api.removeFavorite(seed.seed_id);
       toast.success("Removed from favorites");
     } else {
-      saveFavorites([...favorites, seed]);
+      setFavorites(prev => [...prev, seed]);
+      await api.addFavorite(seed.seed_id);
       toast.success("Added to favorites!");
     }
   };
@@ -240,25 +227,10 @@ const BuyerDashboard = () => {
 
   const handleScanProduct = () => lookupSeed(scanInput);
 
-  const handleNativeScan = async () => {
-    if (canScan) {
-      const scannedValue = await scanBarcode();
-      if (scannedValue) {
-        await lookupSeed(scannedValue);
-      }
-    } else {
-      setShowWebScanner(true);
-    }
-  };
-
   const handleWebScan = async (result: string) => {
-    setShowWebScanner(false);
     let seedId = result.trim();
-    if (seedId.includes("/passport/")) {
-      seedId = decodeURIComponent(seedId.split("/passport/").pop()?.split("?")[0] || seedId);
-    } else if (seedId.startsWith("http")) {
-      try { const parts = new URL(seedId).pathname.split("/").filter(Boolean); seedId = parts[parts.length - 1] || seedId; } catch {}
-    }
+    if (seedId.includes("/passport/")) seedId = decodeURIComponent(seedId.split("/passport/").pop()?.split("?")[0] || seedId);
+    else if (seedId.startsWith("http")) { try { const p = new URL(seedId).pathname.split("/").filter(Boolean); seedId = p[p.length - 1] || seedId; } catch {} }
     await lookupSeed(seedId);
   };
 
@@ -1027,86 +999,27 @@ const BuyerDashboard = () => {
         <div className="flex-1 p-4 lg:p-6">
           {/* Scan Tab */}
           {activeTab === "scan" && (
-            <div className="max-w-md mx-auto animate-fade-in">
-              <div className="text-center mb-8">
-                <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                  <QrCode className="w-10 h-10 text-primary" />
-                </div>
-                <h2 className="text-xl font-semibold text-foreground mb-2">Scan Your Product</h2>
-                <p className="text-muted-foreground">
-                  Enter the ID from your seed bag to view its Plant Passport
-                </p>
+            <div className="max-w-md mx-auto animate-fade-in space-y-5">
+              <div className="text-center">
+                <h2 className="text-xl font-semibold text-foreground mb-1">Scan Your Product</h2>
+                <p className="text-sm text-muted-foreground">Point at a QR code or barcode on the seed bag</p>
               </div>
-
-              <div className="space-y-4">
-                {showWebScanner ? (
-                  <div className="space-y-4">
-                    <WebScanner onScan={handleWebScan} />
-                    <Button
-                      variant="outline"
-                      className="w-full max-w-xs mx-auto block"
-                      onClick={() => setShowWebScanner(false)}
-                    >
-                      Cancel Scanning
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="aspect-square max-w-xs mx-auto rounded-2xl border-2 border-dashed border-border bg-muted/30 flex flex-col items-center justify-center p-8">
-                    <ScanLine className="w-16 h-16 text-primary mb-4" />
-                    <Button onClick={handleNativeScan} size="lg" disabled={isScanning}>
-                      {isScanning ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Scanning...
-                        </>
-                      ) : (
-                        <>
-                          <Camera className="w-4 h-4 mr-2" />
-                          Scan Barcode
-                        </>
-                      )}
-                    </Button>
-                    <span className="text-xs text-muted-foreground mt-2">
-                      Supports QR, Code128, EAN-13 & more
-                    </span>
-                  </div>
-                )}
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center">
-                    <span className="bg-background px-4 text-sm text-muted-foreground">or enter ID manually</span>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <Input
-                    placeholder="e.g., SEED-ABC123"
-                    value={scanInput}
-                    onChange={(e) => setScanInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleScanProduct()}
-                  />
-                  <Button 
-                    onClick={handleScanProduct} 
-                    size="lg" 
-                    className="w-full"
-                    disabled={isScanning}
-                  >
-                    {isScanning ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Looking up...
-                      </>
-                    ) : (
-                      <>
-                        <Search className="w-4 h-4 mr-2" />
-                        View Passport
-                      </>
-                    )}
-                  </Button>
-                </div>
+              <WebScanner onScan={handleWebScan} />
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border" /></div>
+                <div className="relative flex justify-center"><span className="bg-background px-4 text-sm text-muted-foreground">or enter ID manually</span></div>
+              </div>
+              <div className="space-y-3">
+                <Input
+                  placeholder="e.g., SEED-ABC123"
+                  value={scanInput}
+                  onChange={(e) => setScanInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleScanProduct()}
+                  className="text-center font-mono"
+                />
+                <Button onClick={handleScanProduct} size="lg" className="w-full" disabled={isScanning || !scanInput.trim()}>
+                  {isScanning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Looking up...</> : <><Search className="w-4 h-4 mr-2" />View Passport</>}
+                </Button>
               </div>
             </div>
           )}
