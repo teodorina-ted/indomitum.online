@@ -189,7 +189,7 @@ const AddPlant = () => {
   };
 
   const canProceed = () => {
-    if (currentStep === 1) return formData.id.trim() !== "";
+    if (currentStep === 1) return formData.id.trim().length >= 2;
     if (currentStep === 4) return formData.name.trim() !== "" && formData.quantity.trim() !== "";
     return true;
   };
@@ -243,9 +243,9 @@ const AddPlant = () => {
             </div>
 
             {/* Scanner always mounted — hidden via CSS when ID is set to avoid remount glitch */}
-            <div style={{ display: formData.id ? "none" : "block" }}>
-              <WebScanner onScan={handleWebScan} />
-            </div>
+            {!formData.id && (
+              <WebScanner key="addplant-scanner" onScan={handleWebScan} />
+            )}
 
             {formData.id ? (
               <div className="flex items-center gap-3 p-4 bg-primary/10 border border-primary/20 rounded-xl">
@@ -273,7 +273,8 @@ const AddPlant = () => {
                   <Input
                     placeholder="e.g., SEED-ABC123"
                     value={formData.id}
-                    onChange={e => { const val = e.target.value; setFormData(p => ({ ...p, id: val })); }}                    onKeyDown={e => e.key === "Enter" && formData.id.trim() && document.getElementById("add-plant-continue")?.click()}
+                    onChange={e => setFormData(p => ({ ...p, id: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && formData.id.trim() && document.getElementById("add-plant-continue")?.click()}
                   />
                   <p className="text-xs text-muted-foreground mt-1">Press Continue to validate</p>
                 </div>
